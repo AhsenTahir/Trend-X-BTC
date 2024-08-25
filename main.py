@@ -16,6 +16,7 @@ config.read('config.ini')
 api_key = config['binance']['api_key']
 secret_key = config['binance']['secret_key']
 
+
 print(f"API Key: {api_key}")
 print(f"Secret Key: {secret_key}")
 
@@ -76,3 +77,33 @@ print(historical_df.shape[0])
 real_time_df = fetch_real_time_data()
 print("\nReal-Time Data:")
 print(real_time_df)
+
+
+def fetch_fear_greed_index():
+    # Define the API endpoint
+    url = 'https://api.alternative.me/fng/?limit=30'  # Adjust limit for more data points
+
+    # Fetch data from the API
+    response = requests.get(url)
+    data = response.json()
+    
+    # Parse data into a pandas DataFrame
+    df = pd.DataFrame(data['data'])
+
+    # Convert timestamp to datetime
+    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
+    df['date'] = df['timestamp'].dt.date
+    df['time'] = df['timestamp'].dt.time
+    
+    # Rename the 'value' and 'value_classification' columns
+    df = df.rename(columns={'value': 'index', 'value_classification': 'classification'})
+    
+    # Reorder the columns
+    df = df[['timestamp', 'date', 'time', 'index', 'classification']]
+    
+    return df
+
+# Usage
+df = fetch_fear_greed_index()
+print(df.head())
+
