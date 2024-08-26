@@ -5,13 +5,23 @@ import hmac
 import hashlib
 import time
 import configparser
+import os
+# Initialize the config parser
+config = configparser.ConfigParser()
+
+# Get the current directory of the script
+script_dir = os.path.dirname(os.path.realpath(__file__))
+
+# Build the full path to the config file
+config_path = os.path.join(script_dir, 'config.ini')
 
 # Initialize the config parser
 config = configparser.ConfigParser()
 
 # Read the config file
-config.read('config.ini')
-
+files_read = config.read(config_path)
+if not files_read:
+    print("Failed to read the config file.")
 # Access the variables
 api_key = config['binance']['api_key']
 secret_key = config['binance']['secret_key']
