@@ -25,6 +25,7 @@ if not files_read:
 # Access the variables
 api_key = config['binance']['api_key']
 secret_key = config['binance']['secret_key']
+alpha_vantage_api_key = config['alphavantage']['api_key']
 
 
 print(f"API Key: {api_key}")
@@ -116,4 +117,32 @@ def fetch_fear_greed_index():
 # Usage
 df = fetch_fear_greed_index()
 print(df.head())
+
+
+def fetch_alpha_vantage_interest_rate(api_key):
+    endpoint = f"https://www.alphavantage.co/query"
+    params = {
+        'function': 'FEDERAL_FUNDS_RATE',
+        'apikey': api_key,
+        'datatype': 'json',
+    }
+
+    response = requests.get(endpoint, params=params)
+
+    if response.status_code == 200:
+        data = response.json()
+        df = pd.DataFrame(data['data'])
+        return df
+    else:
+        print(f"Failed to fetch data: {response.status_code}, {response.text}")
+        return None
+
+# Example usage
+api_key = 'your_alpha_vantage_api_key_here'
+df = fetch_alpha_vantage_interest_rate(alpha_vantage_api_key)
+if df is not None:
+    print(df.head())
+else:
+    print("Failed to retrieve data.")
+
 
