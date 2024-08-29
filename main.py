@@ -146,3 +146,46 @@ else:
     print("Failed to retrieve data.")
 
 
+from binance.client import Client
+
+def fetch_and_clean_binance_data(symbol, start_date, end_date, interval):
+
+    client = Client(API_KEY, SECRET_KEY)
+    
+    # Fetching historical candlestick data
+    klines = client.get_historical_klines(symbol, interval, start_date, end_date)
+    
+    # Creating a DataFrame
+    df = pd.DataFrame(klines, columns=['Open time', 'Open', 'High', 'Low', 'Close', 'Volume',
+                                       'Close time', 'Quote asset volume', 'Number of trades',
+                                       'Taker buy base asset volume', 'Taker buy quote asset volume', 'Ignore'])
+    
+    # Convert timestamp to readable date
+    df['Open time'] = pd.to_datetime(df['Open time'], unit='ms')
+    df['Close time'] = pd.to_datetime(df['Close time'], unit='ms')
+    
+    # Convert numeric values to float
+    for col in ['Open', 'High', 'Low', 'Close', 'Volume', 'Quote asset volume',
+                'Taker buy base asset volume', 'Taker buy quote asset volume']:
+        df[col] = df[col].astype(float)
+    
+    # Data cleaning
+    # Drop columns that are not required (e.g., 'Ignore')
+    df.drop(columns=['Ignore', 'Close time'], inplace=True)
+    
+    # Handling missing values by forward filling
+    df.ffill(inplace=True)
+    
+    return df
+
+# Example usage
+symbol = 'BTCUSDT'  # Bitcoin to USD Tether
+start_date = "1 Jan, 2014"
+end_date = "1 Jan, 2024"
+interval = Client.KLINE_INTERVAL_1DAY  # Daily intervals
+
+btc_data = fetch_and_clean_binance_data(symbol, start_date, end_date, interval)
+print(btc_data.head())
+
+
+
