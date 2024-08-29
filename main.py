@@ -6,35 +6,18 @@ import hashlib
 import time
 import configparser
 import os
+from datetime import datetime, timedelta
+from config import Binance_api_key, Binance_secret_key, News_sentiment_api_key
 # Initialize the config parser
-config = configparser.ConfigParser()
-
-# Get the current directory of the script
-script_dir = os.path.dirname(os.path.realpath(__file__))
-
-# Build the full path to the config file
-config_path = os.path.join(script_dir, 'config.ini')
-
-# Initialize the config parser
-config = configparser.ConfigParser()
-
-# Read the config file
-files_read = config.read(config_path)
-if not files_read:
-    print("Failed to read the config file.")
-# Access the variables
-api_key = config['binance']['api_key']
-secret_key = config['binance']['secret_key']
-alpha_vantage_api_key = config['alphavantage']['api_key']
 
 
-print(f"API Key: {api_key}")
-print(f"Secret Key: {secret_key}")
 
 # Your API key and secret key from Binance
-API_KEY = api_key 
-SECRET_KEY = secret_key
-
+API_KEY = Binance_api_key
+SECRET_KEY = Binance_secret_key
+print(API_KEY)
+print(SECRET_KEY)
+print(News_sentiment_api_key)
 # Base URL for Binance API
 BASE_URL = 'https://api.binance.com'
 
@@ -79,73 +62,60 @@ def fetch_real_time_data(symbol='BTCUSDT'):
     }])
     return df
 
-# Fetch historical data
-historical_df = fetch_historical_data()
-print("Historical Data:")
-print(historical_df.shape[0])
 
-# Fetch real-time data
-real_time_df = fetch_real_time_data()
-print("\nReal-Time Data:")
-print(real_time_df)
-
-
-def fetch_fear_greed_index():
-    # Define the API endpoint
-    url = 'https://api.alternative.me/fng/?limit=30'  # Adjust limit for more data points
-
-    # Fetch data from the API
-    response = requests.get(url)
-    data = response.json()
+def get_news_sentiment(api_key, tickers=None, topics=None):
+    # Define the base URL for the API request
+    base_url = "https://www.alphavantage.co/query"
     
-    # Parse data into a pandas DataFrame
-    df = pd.DataFrame(data['data'])
-
-    # Convert timestamp to datetime
-    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
-    df['date'] = df['timestamp'].dt.date
-    df['time'] = df['timestamp'].dt.time
+    # Set the function parameter for the API request
+    function = "NEWS_SENTIMENT"
     
-    # Rename the 'value' and 'value_classification' columns
-    df = df.rename(columns={'value': 'index', 'value_classification': 'classification'})
+    # Calculate the date range for the past 10 years
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=10 * 365)  # Approximate 10 years
     
-    # Reorder the columns
-    df = df[['timestamp', 'date', 'time', 'index', 'classification']]
+    # Convert dates to the required format: YYYYMMDDTHHMM
+    time_from = start_date.strftime("%Y%m%dT%H%M")
+    time_to = end_date.strftime("%Y%m%dT%H%M")
     
-    return df
-
-# Usage
-df = fetch_fear_greed_index()
-print(df.head())
-
-
-def fetch_alpha_vantage_interest_rate(api_key):
-    endpoint = f"https://www.alphavantage.co/query"
+    # Prepare the parameters for the API request
     params = {
-        'function': 'FEDERAL_FUNDS_RATE',
-        'apikey': api_key,
-        'datatype': 'json',
+        "function": function,
+        "apikey": api_key,
+        "time_from": time_from,
+        "time_to": time_to,
+        "sort": "EARLIEST",  # Retrieve data starting from the earliest date
+        "limit": 1000  # Set a high limit to retrieve as much data as possible
     }
-
-    response = requests.get(endpoint, params=params)
-
+    
+    # Add optional filters if provided
+    if tickers:
+        params["tickers"] = ",".join(tickers)
+    if topics:
+        params["topics"] = ",".join(topics)
+    
+    # Make the API request
+    response = requests.get(base_url, params=params)
+    
+    # Check if the request was successful
     if response.status_code == 200:
         data = response.json()
-        df = pd.DataFrame(data['data'])
-        return df
+        
+        # Extract data and convert it to a DataFrame
+        if "feed" in data:
+            news_data = data["feed"]
+            df = pd.DataFrame(news_data)
+            return df
+        else:
+            print("No data found.")
+            return pd.DataFrame()  # Return an empty DataFrame if no data found
     else:
-        print(f"Failed to fetch data: {response.status_code}, {response.text}")
-        return None
-
-# Example usage
-api_key = 'your_alpha_vantage_api_key_here'
-df = fetch_alpha_vantage_interest_rate(alpha_vantage_api_key)
-if df is not None:
-    print(df.head())
-else:
-    print("Failed to retrieve data.")
+        # Handle errors
+        print(f"Error: {response.status_code}")
+        return pd.DataFrame()  # Return an empty DataFrame in case of an error
 
 
+<<<<<<< HEAD
 from binance.client import Client
 
 def fetch_and_clean_binance_data(symbol, start_date, end_date, interval):
@@ -189,3 +159,17 @@ print(btc_data.head())
 
 
 
+=======
+df_News_Data=get_news_sentiment(News_sentiment_api_key)
+print(df_News_Data)
+#commenting for a while
+# Fetch historical data
+# historical_df = fetch_historical_data()
+# print("Historical Data:")
+# print(historical_df.shape[0])
+
+# # Fetch real-time data
+# real_time_df = fetch_real_time_data()
+# print("\nReal-Time Data:")
+# print(real_time_df)
+>>>>>>> 2a7bcdb62aec153565bd560f049c685e2e9f0ac7
