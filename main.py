@@ -157,8 +157,66 @@ interval = Client.KLINE_INTERVAL_1DAY  # Daily intervals
 # print(btc_data.head())
 
 
-#FUNCTION FOR GETTING DATA FOR 10 YEARS (3 TIMES API CALLS)
+# Initialize the Binance client
+client = Client(API_KEY, SECRET_KEY)
 
+# Function to fetch daily order flow data
+def fetch_daily_order_flow(symbol, start_date, end_date):
+    # Convert dates to milliseconds
+    start_str = int(start_date.timestamp() * 1000)
+    end_str = int(end_date.timestamp() * 1000)
+
+    # Fetch historical klines data
+    klines = client.get_historical_klines(symbol, Client.KLINE_INTERVAL_1DAY, start_str, end_str)
+    
+    # Create a DataFrame
+    df = pd.DataFrame(klines, columns=['open_time', 'open', 'high', 'low', 'close', 'volume',
+                                       'close_time', 'quote_asset_volume', 'number_of_trades',
+                                       'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'])
+    df['open_time'] = pd.to_datetime(df['open_time'], unit='ms')
+    df.set_index('open_time', inplace=True)
+    
+    # Convert relevant columns to numeric
+    df['volume'] = pd.to_numeric(df['volume'])
+    df['taker_buy_base_asset_volume'] = pd.to_numeric(df['taker_buy_base_asset_volume'])
+
+    # Calculate net order flow
+    df['net_order_flow'] = df['taker_buy_base_asset_volume'] - (df['volume'] - df['taker_buy_base_asset_volume'])
+    
+    return df[['volume', 'taker_buy_base_asset_volume', 'net_order_flow']]
+
+# Define the time periods
+end_date = datetime.now()
+intervals = [
+    (end_date - timedelta(days=3652), end_date - timedelta(days=2434)),
+    (end_date - timedelta(days=2435), end_date - timedelta(days=1217)),
+    (end_date - timedelta(days=1218), end_date)
+]
+
+# Collect data over each interval
+frames = []
+for start, end in intervals:
+    order_flow_data = fetch_daily_order_flow('BTCUSDT', start, end)
+    frames.append(order_flow_data)
+    print(f"Data fetched from {start.date()} to {end.date()}")
+
+# Concatenate all data frames
+full_data = pd.concat(frames)
+
+# Basic EDA and Data Correction
+print("\nBasic Exploratory Data Analysis:")
+print("Data Summary:\n", full_data.describe())
+print("Missing Values:\n", full_data.isnull().sum())
+
+# Handling missing values, if any
+full_data.ffill(inplace=True)  # forward fill to handle missing data
+
+# Display the corrected DataFrame head
+print("\nCorrected Data Head:\n", full_data.head())
+
+
+
+#FUNCTION FOR GETTING DATA FOR 10 YEARS (3 TIMES API CALLS)
 def Binance_Data_For_10_Years(symbol='BTCUSDT', interval='1d'):
     client = Client(API_KEY, SECRET_KEY)
     
@@ -258,4 +316,3 @@ btc_full_data = Binance_Data_For_10_Years()
 news_full_data = get_full_news_sentiment(News_sentiment_api_key, tickers=['BTC'], topics=['crypto'])
 news_data=get_news_sentiment(News_sentiment_api_key, tickers=['BTC'], topics=['crypto'])
 print(btc_full_data.describe())
-
