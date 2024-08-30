@@ -153,11 +153,8 @@ start_date = "1 Jan, 2014"
 end_date = "1 Jan, 2024"
 interval = Client.KLINE_INTERVAL_1DAY  # Daily intervals
 
-btc_data = fetch_and_clean_binance_data(symbol, start_date, end_date, interval)
-print(btc_data.head())
-
-
-
+# btc_data = fetch_and_clean_binance_data(symbol, start_date, end_date, interval)
+# print(btc_data.head())
 
 
 # Initialize the Binance client
@@ -217,3 +214,105 @@ full_data.ffill(inplace=True)  # forward fill to handle missing data
 # Display the corrected DataFrame head
 print("\nCorrected Data Head:\n", full_data.head())
 
+
+
+#FUNCTION FOR GETTING DATA FOR 10 YEARS (3 TIMES API CALLS)
+def Binance_Data_For_10_Years(symbol='BTCUSDT', interval='1d'):
+    client = Client(API_KEY, SECRET_KEY)
+    
+    # Define the time range for the API calls
+    end_date = datetime.now()
+    start_date_3rd = end_date - timedelta(days=365 * 10)
+    start_date_2nd = end_date - timedelta(days=365 * 7)
+    start_date_1st = end_date - timedelta(days=365 * 4)
+    
+    # Fetch data in 3 segments
+    data_1 = fetch_and_clean_binance_data(symbol, start_date_3rd.strftime("%d %b, %Y"), start_date_2nd.strftime("%d %b, %Y"), interval)
+    print("Binace data1")
+    print(data_1.shape[0])
+    data_2 = fetch_and_clean_binance_data(symbol, start_date_2nd.strftime("%d %b, %Y"), start_date_1st.strftime("%d %b, %Y"), interval)
+    print("Binace data2")
+    print(data_2.shape[0])
+
+    data_3 = fetch_and_clean_binance_data(symbol, start_date_1st.strftime("%d %b, %Y"), end_date.strftime("%d %b, %Y"), interval)
+    print("Binace data3")
+    print(data_3.shape[0])
+
+    # Combine all data into one DataFrame
+    full_data = pd.concat([data_1, data_2, data_3], ignore_index=True)
+    print("Binace data overall")
+    print(full_data.shape[0])
+    return full_data
+
+# Fetch news data by making 3 API calls and concatenating the results
+def get_full_news_sentiment(api_key, tickers=None, topics=None):
+    base_url = "https://www.alphavantage.co/query"
+    function = "NEWS_SENTIMENT"
+    
+    # Define date ranges for 3 segments
+    end_date = datetime.now()
+    start_date_3rd = end_date - timedelta(days=365 * 10)
+    start_date_2nd = end_date - timedelta(days=365 * 7)
+    start_date_1st = end_date - timedelta(days=365 * 4)
+    
+    # Fetch data in 3 segments
+    params_1 = {
+        "function": function,
+        "apikey": api_key,
+        "time_from": start_date_3rd.strftime("%Y%m%dT%H%M"),
+        "time_to": start_date_2nd.strftime("%Y%m%dT%H%M"),
+        "sort": "EARLIEST",
+        "limit": 1000
+    }
+    params_2 = {
+        "function": function,
+        "apikey": api_key,
+        "time_from": start_date_2nd.strftime("%Y%m%dT%H%M"),
+        "time_to": start_date_1st.strftime("%Y%m%dT%H%M"),
+        "sort": "EARLIEST",
+        "limit": 1000
+    }
+    params_3 = {
+        "function": function,
+        "apikey": api_key,
+        "time_from": start_date_1st.strftime("%Y%m%dT%H%M"),
+        "time_to": end_date.strftime("%Y%m%dT%H%M"),
+        "sort": "EARLIEST",
+        "limit": 1000
+    }
+    
+    if tickers:
+        params_1["tickers"] = ",".join(tickers)
+        params_2["tickers"] = ",".join(tickers)
+        params_3["tickers"] = ",".join(tickers)
+    if topics:
+        params_1["topics"] = ",".join(topics)
+        params_2["topics"] = ",".join(topics)
+        params_3["topics"] = ",".join(topics)
+    
+    # Fetch the data
+    response_1 = requests.get(base_url, params=params_1)
+    response_2 = requests.get(base_url, params=params_2)
+    response_3 = requests.get(base_url, params=params_3)
+    
+    # Check if all requests were successful and combine the data
+    if response_1.status_code == 200 and response_2.status_code == 200 and response_3.status_code == 200:
+        data_1 = response_1.json().get("feed", [])
+        data_2 = response_2.json().get("feed", [])
+        data_3 = response_3.json().get("feed", [])
+        
+        # Combine all news data
+        full_data = pd.DataFrame(data_1 + data_2 + data_3)
+        print("News data overall")
+        print(full_data.shape[0])
+        return full_data
+    else:
+        print(f"Error fetching news data: {response_1.status_code}, {response_2.status_code}, {response_3.status_code}")
+        return pd.DataFrame()
+
+# Example usage
+#2017-08-17 this is the starting date of the data in the binance
+btc_full_data = Binance_Data_For_10_Years()
+news_full_data = get_full_news_sentiment(News_sentiment_api_key, tickers=['BTC'], topics=['crypto'])
+news_data=get_news_sentiment(News_sentiment_api_key, tickers=['BTC'], topics=['crypto'])
+print(btc_full_data.describe())
