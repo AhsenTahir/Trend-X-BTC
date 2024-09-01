@@ -252,10 +252,53 @@ def get_full_news_sentiment(api_key, tickers=None, topics=None):
         print(f"Error fetching news data: {response_1.status_code}, {response_2.status_code}, {response_3.status_code}")
         return pd.DataFrame()
 
+def get_cpi_data(api_key, start_date='2017-07-1'):
+    # Define the URL with your API key
+    url = f'https://www.alphavantage.co/query?function=CPI&interval=monthly&apikey={api_key}'
+    
+    # Fetch the data
+    response = requests.get(url)
+    
+    # Check if the request was successful
+    if response.status_code != 200:
+        raise Exception(f"Failed to fetch data: {response.status_code}")
+    
+    # Parse the JSON response
+    data = response.json()
+    
+    # Check if data is valid
+    if 'data' not in data:
+        raise Exception("Invalid data received from the API")
+    
+    # Convert the data into a DataFrame
+    df = pd.DataFrame(data['data'])
+    
+    # Convert the 'date' column to datetime format and sort the DataFrame
+    df['date'] = pd.to_datetime(df['date'])
+    df = df.sort_values('date')
+    
+    # Filter data from the start_date to today
+    df = df[df['date'] >= pd.to_datetime(start_date)]
+    
+    # Since the data is monthly, we'll forward fill the missing days to create a daily DataFrame
+    df.set_index('date', inplace=True)
+    df = df.resample('D').ffill().reset_index()  # Forward fill to get daily values
+
+    return df
 # Example usage
 #2017-08-17 this is the starting date of the data in the binance
 btc_full_data = Binance_Data_For_10_Years()
-news_full_data = get_full_news_sentiment(News_sentiment_api_key, tickers=['BTC'], topics=['crypto'])
+news_full_data = get_full_news_sentiment(News_sentiment_api_key, tickers=['COIN,CRYPTO:BTC,FOREX:USD'], topics=['crypto'])
 news_data=get_news_sentiment(News_sentiment_api_key, tickers=['BTC'], topics=['crypto'])
 print(btc_full_data.describe())
+# print(news_full_data.describe())
+# print(news_full_data.head())
+
+print("CPI data")
+
+#it is getting the cpi data from 2017-7-1 to today
+Cpi_data= get_cpi_data(News_sentiment_api_key)
+print(Cpi_data.shape[0])
+print(Cpi_data.describe())
+
 
