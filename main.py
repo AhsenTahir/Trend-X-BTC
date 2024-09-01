@@ -157,8 +157,66 @@ interval = Client.KLINE_INTERVAL_1DAY  # Daily intervals
 # print(btc_data.head())
 
 
-#FUNCTION FOR GETTING DATA FOR 10 YEARS (3 TIMES API CALLS)
+# Initialize the Binance client
+client = Client(API_KEY, SECRET_KEY)
 
+# Function to fetch daily order flow data
+def fetch_daily_order_flow(symbol, start_date, end_date):
+    # Convert dates to milliseconds
+    start_str = int(start_date.timestamp() * 1000)
+    end_str = int(end_date.timestamp() * 1000)
+
+    # Fetch historical klines data
+    klines = client.get_historical_klines(symbol, Client.KLINE_INTERVAL_1DAY, start_str, end_str)
+    
+    # Create a DataFrame
+    df = pd.DataFrame(klines, columns=['open_time', 'open', 'high', 'low', 'close', 'volume',
+                                       'close_time', 'quote_asset_volume', 'number_of_trades',
+                                       'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'])
+    df['open_time'] = pd.to_datetime(df['open_time'], unit='ms')
+    df.set_index('open_time', inplace=True)
+    
+    # Convert relevant columns to numeric
+    df['volume'] = pd.to_numeric(df['volume'])
+    df['taker_buy_base_asset_volume'] = pd.to_numeric(df['taker_buy_base_asset_volume'])
+
+    # Calculate net order flow
+    df['net_order_flow'] = df['taker_buy_base_asset_volume'] - (df['volume'] - df['taker_buy_base_asset_volume'])
+    
+    return df[['volume', 'taker_buy_base_asset_volume', 'net_order_flow']]
+
+# Define the time periods
+end_date = datetime.now()
+intervals = [
+    (end_date - timedelta(days=3652), end_date - timedelta(days=2434)),
+    (end_date - timedelta(days=2435), end_date - timedelta(days=1217)),
+    (end_date - timedelta(days=1218), end_date)
+]
+
+# Collect data over each interval
+frames = []
+for start, end in intervals:
+    order_flow_data = fetch_daily_order_flow('BTCUSDT', start, end)
+    frames.append(order_flow_data)
+    print(f"Data fetched from {start.date()} to {end.date()}")
+
+# Concatenate all data frames
+full_data = pd.concat(frames)
+
+# Basic EDA and Data Correction
+print("\nBasic Exploratory Data Analysis:")
+print("Data Summary:\n", full_data.describe())
+print("Missing Values:\n", full_data.isnull().sum())
+
+# Handling missing values, if any
+full_data.ffill(inplace=True)  # forward fill to handle missing data
+
+# Display the corrected DataFrame head
+print("\nCorrected Data Head:\n", full_data.head())
+
+
+
+#FUNCTION FOR GETTING DATA FOR 10 YEARS (3 TIMES API CALLS)
 def Binance_Data_For_10_Years(symbol='BTCUSDT', interval='1d'):
     client = Client(API_KEY, SECRET_KEY)
     
@@ -285,6 +343,58 @@ def get_cpi_data(api_key, start_date='2017-07-1'):
     df = df.resample('D').ffill().reset_index()  # Forward fill to get daily values
 
     return df
+def get_inflation_data(api_key, start_date='2017-08-17'):
+    # Construct the URL for fetching the inflation data from Alpha Vantage
+    url = f'https://www.alphavantage.co/query?function=INFLATION&apikey={api_key}'
+
+    # Fetch data from the API
+    response = requests.get(url)
+
+    # Check if the request was successful
+    if response.status_code != 200:
+        raise Exception(f"Failed to fetch data: {response.status_code}")
+
+    # Parse the JSON response
+    inflation_data = response.json()
+
+    # Check if 'data' key is present in the JSON response
+    if 'data' not in inflation_data:
+        raise Exception("Invalid data received from the API")
+    
+    annual_df = pd.DataFrame(inflation_data['data'])
+
+    # Convert 'date' column to datetime and 'value' column to float
+    annual_df['date'] = pd.to_datetime(annual_df['date'])
+    annual_df['value'] = annual_df['value'].astype(float)
+
+    # Convert start_date to datetime
+    start_date = pd.to_datetime(start_date)
+
+    # Create an empty DataFrame to hold daily data
+    daily_df = pd.DataFrame()
+
+    # Loop through each row in the annual DataFrame
+    for _, row in annual_df.iterrows():
+        year = row['date'].year
+        inflation_rate = row['value']
+        
+        # Generate a date range for the year
+        date_range = pd.date_range(start=f'{year}-01-01', end=f'{year}-12-31', freq='D')
+        
+        # Create a DataFrame for this year's dates and inflation rate
+        year_df = pd.DataFrame({
+            'date': date_range,
+            'inflation_rate': inflation_rate
+        })
+        
+        # Append to the daily DataFrame
+        daily_df = pd.concat([daily_df, year_df], ignore_index=True)
+
+    # Filter daily_df to include only dates from start_date to the current date
+    current_date = datetime.now()
+    daily_df = daily_df[(daily_df['date'] >= start_date) & (daily_df['date'] <= current_date)]
+
+    return daily_df   
 # Example usage
 #2017-08-17 this is the starting date of the data in the binance
 btc_full_data = Binance_Data_For_10_Years()
@@ -300,5 +410,11 @@ print("CPI data")
 Cpi_data= get_cpi_data(News_sentiment_api_key)
 print(Cpi_data.shape[0])
 print(Cpi_data.describe())
+
+print("Inflation data")
+#it is getting the inflation data from 2017-08-17 to 2023-12-31
+Inflation_data= get_inflation_data(News_sentiment_api_key)
+print(Inflation_data.shape[0])
+print(Inflation_data.describe())
 
 
