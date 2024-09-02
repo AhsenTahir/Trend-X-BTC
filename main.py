@@ -401,3 +401,62 @@ btc_full_data = Binance_Data_For_10_Years()
 news_full_data = get_full_news_sentiment(News_sentiment_api_key, tickers=['COIN,CRYPTO:BTC,FOREX:USD'], topics=['crypto'])
 news_data=get_news_sentiment(News_sentiment_api_key, tickers=['BTC'], topics=['crypto'])
 print(btc_full_data.describe())
+
+#RSI DATA
+
+def calculate_rsi(data, window=14):
+    change = data.diff()
+    gains = (change.where(change > 0, 0)).rolling(window=window).mean()
+    losses = (-change.where(change < 0, 0)).rolling(window=window).mean()
+    rs = gains / losses
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
+
+def fetch_data_segment(api_key, fsym, tsym, to_timestamp):
+    url = "https://min-api.cryptocompare.com/data/v2/histoday"
+    parameters = {
+        "fsym": fsym,
+        "tsym": tsym,
+        "limit": 2000,
+        "toTs": to_timestamp,
+        "api_key": api_key,
+    }
+    response = requests.get(url, params=parameters)
+    if response.status_code == 200:
+        data = response.json()
+        if 'Data' in data and 'Data' in data['Data']:
+            df = pd.DataFrame(data['Data']['Data'])
+            df['time'] = pd.to_datetime(df['time'], unit='s')
+            return df
+        else:
+            return pd.DataFrame()
+    else:
+        print(f"Failed to fetch data: {response.status_code}")
+        return pd.DataFrame()
+
+def fetch_and_calculate_rsi(api_key, fsym="BTC", tsym="USD", start_date="2017-08-01"):
+    end_date = datetime.now()
+    start_timestamp = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp())
+    end_timestamp = int(end_date.timestamp())
+    
+    df_full = pd.DataFrame()
+    current_timestamp = end_timestamp
+
+    while current_timestamp > start_timestamp:
+        df_segment = fetch_data_segment(api_key, fsym, tsym, current_timestamp)
+        if df_segment.empty:
+            break
+        df_full = pd.concat([df_full, df_segment], ignore_index=True)
+        current_timestamp = df_segment['time'].min().timestamp() - 1  # Ensure no overlap and cover all days
+        
+    if not df_full.empty:
+        df_full.sort_values('time', inplace=True)
+        df_full.set_index('time', inplace=True)
+        df_full['RSI'] = calculate_rsi(df_full['close']).bfill()
+        return df_full[['close', 'RSI']]
+    else:
+        return "No data found or error in fetching data."
+
+# Example usage
+rsi_data = fetch_and_calculate_rsi(RSI_api_key)
+print(rsi_data)
