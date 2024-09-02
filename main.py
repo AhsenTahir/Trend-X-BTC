@@ -7,7 +7,7 @@ import time
 import configparser
 import os
 from datetime import datetime, timedelta
-from config import Binance_api_key, Binance_secret_key, News_sentiment_api_key
+from config import Binance_api_key, Binance_secret_key, News_sentiment_api_key, RSI_api_key
 # Initialize the config parser
 
 
@@ -401,20 +401,3 @@ btc_full_data = Binance_Data_For_10_Years()
 news_full_data = get_full_news_sentiment(News_sentiment_api_key, tickers=['COIN,CRYPTO:BTC,FOREX:USD'], topics=['crypto'])
 news_data=get_news_sentiment(News_sentiment_api_key, tickers=['BTC'], topics=['crypto'])
 print(btc_full_data.describe())
-# print(news_full_data.describe())
-# print(news_full_data.head())
-
-print("CPI data")
-
-#it is getting the cpi data from 2017-7-1 to today
-Cpi_data= get_cpi_data(News_sentiment_api_key)
-print(Cpi_data.shape[0])
-print(Cpi_data.describe())
-
-print("Inflation data")
-#it is getting the inflation data from 2017-08-17 to 2023-12-31
-Inflation_data= get_inflation_data(News_sentiment_api_key)
-print(Inflation_data.shape[0])
-print(Inflation_data.describe())
-
-
