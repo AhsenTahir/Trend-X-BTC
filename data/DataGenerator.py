@@ -203,6 +203,7 @@ def get_cpi_data(api_key, start_date='2017-07-1'):
     
     # Convert the data into a DataFrame
     df = pd.DataFrame(data['data'])
+    df.rename(columns={'value': 'CPI'}, inplace=True)
     
     # Convert the 'date' column to datetime format and sort the DataFrame
     df['date'] = pd.to_datetime(df['date'])
@@ -324,34 +325,48 @@ def fetch_and_calculate_rsi(api_key, fsym="BTC", tsym="USD", start_date="2017-08
     else:
         return "No data found or error in fetching data."
 
-# BINANCE DATA
-btc_full_data = Binance_Data(symbol='BTCUSDT', interval='1d')
+def Data_Generator():
+    # Fetch Binance Data
+    btc_full_data = Binance_Data(symbol='BTCUSDT', interval='1d')
+    btc_full_data.rename(columns={'Open time': 'Date'}, inplace=True)
 
-# Daily Order Flow Data
-frames = []
-for start, end in intervals:
-    order_flow_data = fetch_daily_order_flow('BTCUSDT', start, end)
-    frames.append(order_flow_data)
-    print(f"Data fetched from {start.date()} to {end.date()}")
+    # Daily Order Flow Data
+    frames = []
+    for start, end in intervals:
+        order_flow_data = fetch_daily_order_flow('BTCUSDT', start, end)
+        frames.append(order_flow_data)
+    full_order_flow_data = pd.concat(frames)
+    full_order_flow_data.reset_index(inplace=True)
+    full_order_flow_data.rename(columns={'open_time': 'Date'}, inplace=True)
 
-full_data = pd.concat(frames)
-# Basic EDA and Data Correction
-print("\nBasic Exploratory Data Analysis:")
-print("Data Summary:\n", full_data.describe())
-print("Missing Values:\n", full_data.isnull().sum())
-full_data.ffill(inplace=True)  
-print("\nCorrected Data Head:\n", full_data.head())
+    # RSI Data
+    rsi_data = fetch_and_calculate_rsi(RSI_api_key)
+    rsi_data.reset_index(inplace=True)
+    rsi_data.rename(columns={'time': 'Date'}, inplace=True)
 
-# News Sentiment Data
-news_data=get_news_sentiment(News_sentiment_api_key, tickers=['BTC'], topics=['crypto'])
+    # Inflation Data
+    inflation_data = get_inflation_data(News_sentiment_api_key)
+    inflation_data.rename(columns={'date': 'Date', 'inflation_rate': 'Inflation Rate'}, inplace=True)
 
-#Rsi Data
-rsi_data = fetch_and_calculate_rsi(RSI_api_key)
+    # CPI Data
+    cpi_data = get_cpi_data(News_sentiment_api_key)
+    cpi_data.rename(columns={'date': 'Date', 'cpi_value': 'CPI'}, inplace=True)
 
-# Inflation Data
-inflation_data = get_inflation_data(News_sentiment_api_key)
+    # Merge DataFrames
+    combined_df = pd.merge(btc_full_data, full_order_flow_data, on='Date', how='outer')
+    combined_df = pd.merge(combined_df, rsi_data, on='Date', how='outer')
+    combined_df = pd.merge(combined_df, inflation_data, on='Date', how='outer')
+    combined_df = pd.merge(combined_df, cpi_data, on='Date', how='outer')
+    combined_df.sort_values('Date', inplace=True)
 
-# CPI Data
-cpi_data = get_cpi_data(News_sentiment_api_key)
+    print(combined_df.shape)
+    print(combined_df.columns)
+    return combined_df
+
+
+
+
+
+
 
 
