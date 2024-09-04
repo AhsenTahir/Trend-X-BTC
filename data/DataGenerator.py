@@ -7,6 +7,9 @@ import time
 import configparser
 import os
 from datetime import datetime, timedelta
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from config import Binance_api_key, Binance_secret_key, News_sentiment_api_key, RSI_api_key
 # Initialize the config parser
 
@@ -21,46 +24,6 @@ print(News_sentiment_api_key)
 # Base URL for Binance API
 BASE_URL = 'https://api.binance.com'
 
-# Function to fetch historical data (e.g., last 1000 1-minute candles)
-def fetch_historical_data(symbol='BTCUSDT', interval='1m', limit=1000):
-    endpoint = f'/api/v3/klines'
-    params = {
-        'symbol': symbol,
-        'interval': interval,
-        'limit': limit
-    }
-    url = BASE_URL + endpoint
-    response = requests.get(url, params=params)
-    data = response.json()
-
-    df = pd.DataFrame(data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 
-                                     'close_time', 'quote_asset_volume', 'number_of_trades', 
-                                     'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'])
-    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-    return df[['timestamp', 'open', 'high', 'low', 'close', 'volume']]
-
-# Function to fetch real-time data (24hr ticker price change statistics)
-def fetch_real_time_data(symbol='BTCUSDT'):
-    endpoint = '/api/v3/ticker/24hr'
-    params = {'symbol': symbol}
-    url = BASE_URL + endpoint
-    response = requests.get(url, params=params)
-    data = response.json()
-
-    df = pd.DataFrame([{
-        'timestamp': datetime.now(),
-        'symbol': symbol,
-        'last_price': data['lastPrice'],
-        'price_change': data['priceChange'],
-        'price_change_percent': data['priceChangePercent'],
-        'volume': data['volume'],
-        'quote_volume': data['quoteVolume'],
-        'high_price': data['highPrice'],
-        'low_price': data['lowPrice'],
-        'bid_price': data['bidPrice'],
-        'ask_price': data['askPrice']
-    }])
-    return df
 
 
 def get_news_sentiment(api_key, tickers=None, topics=None):
@@ -193,122 +156,32 @@ intervals = [
     (end_date - timedelta(days=1218), end_date)
 ]
 
-# Collect data over each interval
-frames = []
-for start, end in intervals:
-    order_flow_data = fetch_daily_order_flow('BTCUSDT', start, end)
-    frames.append(order_flow_data)
-    print(f"Data fetched from {start.date()} to {end.date()}")
-
-# Concatenate all data frames
-full_data = pd.concat(frames)
-
-# Basic EDA and Data Correction
-print("\nBasic Exploratory Data Analysis:")
-print("Data Summary:\n", full_data.describe())
-print("Missing Values:\n", full_data.isnull().sum())
-
-# Handling missing values, if any
-full_data.ffill(inplace=True)  # forward fill to handle missing data
-
-# Display the corrected DataFrame head
-print("\nCorrected Data Head:\n", full_data.head())
 
 
 
-#FUNCTION FOR GETTING DATA FOR 10 YEARS (3 TIMES API CALLS)
-def Binance_Data_For_10_Years(symbol='BTCUSDT', interval='1d'):
+
+
+
+def Binance_Data(symbol='BTCUSDT', interval='1d'):
     client = Client(API_KEY, SECRET_KEY)
     
-    # Define the time range for the API calls
+    # Define the time range for the API call
     end_date = datetime.now()
-    start_date_3rd = end_date - timedelta(days=365 * 10)
-    start_date_2nd = end_date - timedelta(days=365 * 7)
-    start_date_1st = end_date - timedelta(days=365 * 4)
-    
-    # Fetch data in 3 segments
-    data_1 = fetch_and_clean_binance_data(symbol, start_date_3rd.strftime("%d %b, %Y"), start_date_2nd.strftime("%d %b, %Y"), interval)
-    print("Binace data1")
-    print(data_1.shape[0])
-    data_2 = fetch_and_clean_binance_data(symbol, start_date_2nd.strftime("%d %b, %Y"), start_date_1st.strftime("%d %b, %Y"), interval)
-    print("Binace data2")
-    print(data_2.shape[0])
+    start_date = end_date - timedelta(days=365 * 10)  # Start date 10 years ago
 
-    data_3 = fetch_and_clean_binance_data(symbol, start_date_1st.strftime("%d %b, %Y"), end_date.strftime("%d %b, %Y"), interval)
-    print("Binace data3")
-    print(data_3.shape[0])
+    # Fetch data in a single call
+    data = fetch_and_clean_binance_data(
+        symbol, 
+        start_date.strftime("%d %b, %Y"), 
+        end_date.strftime("%d %b, %Y"), 
+        interval
+    )
+    
+    print("Binance data overall")
+    print(data.shape[0])
+    return data
 
-    # Combine all data into one DataFrame
-    full_data = pd.concat([data_1, data_2, data_3], ignore_index=True)
-    print("Binace data overall")
-    print(full_data.shape[0])
-    return full_data
 
-# Fetch news data by making 3 API calls and concatenating the results
-def get_full_news_sentiment(api_key, tickers=None, topics=None):
-    base_url = "https://www.alphavantage.co/query"
-    function = "NEWS_SENTIMENT"
-    
-    # Define date ranges for 3 segments
-    end_date = datetime.now()
-    start_date_3rd = end_date - timedelta(days=365 * 10)
-    start_date_2nd = end_date - timedelta(days=365 * 7)
-    start_date_1st = end_date - timedelta(days=365 * 4)
-    
-    # Fetch data in 3 segments
-    params_1 = {
-        "function": function,
-        "apikey": api_key,
-        "time_from": start_date_3rd.strftime("%Y%m%dT%H%M"),
-        "time_to": start_date_2nd.strftime("%Y%m%dT%H%M"),
-        "sort": "EARLIEST",
-        "limit": 1000
-    }
-    params_2 = {
-        "function": function,
-        "apikey": api_key,
-        "time_from": start_date_2nd.strftime("%Y%m%dT%H%M"),
-        "time_to": start_date_1st.strftime("%Y%m%dT%H%M"),
-        "sort": "EARLIEST",
-        "limit": 1000
-    }
-    params_3 = {
-        "function": function,
-        "apikey": api_key,
-        "time_from": start_date_1st.strftime("%Y%m%dT%H%M"),
-        "time_to": end_date.strftime("%Y%m%dT%H%M"),
-        "sort": "EARLIEST",
-        "limit": 1000
-    }
-    
-    if tickers:
-        params_1["tickers"] = ",".join(tickers)
-        params_2["tickers"] = ",".join(tickers)
-        params_3["tickers"] = ",".join(tickers)
-    if topics:
-        params_1["topics"] = ",".join(topics)
-        params_2["topics"] = ",".join(topics)
-        params_3["topics"] = ",".join(topics)
-    
-    # Fetch the data
-    response_1 = requests.get(base_url, params=params_1)
-    response_2 = requests.get(base_url, params=params_2)
-    response_3 = requests.get(base_url, params=params_3)
-    
-    # Check if all requests were successful and combine the data
-    if response_1.status_code == 200 and response_2.status_code == 200 and response_3.status_code == 200:
-        data_1 = response_1.json().get("feed", [])
-        data_2 = response_2.json().get("feed", [])
-        data_3 = response_3.json().get("feed", [])
-        
-        # Combine all news data
-        full_data = pd.DataFrame(data_1 + data_2 + data_3)
-        print("News data overall")
-        print(full_data.shape[0])
-        return full_data
-    else:
-        print(f"Error fetching news data: {response_1.status_code}, {response_2.status_code}, {response_3.status_code}")
-        return pd.DataFrame()
 
 def get_cpi_data(api_key, start_date='2017-07-1'):
     # Define the URL with your API key
@@ -395,12 +268,6 @@ def get_inflation_data(api_key, start_date='2017-08-17'):
     daily_df = daily_df[(daily_df['date'] >= start_date) & (daily_df['date'] <= current_date)]
 
     return daily_df   
-# Example usage
-#2017-08-17 this is the starting date of the data in the binance
-btc_full_data = Binance_Data_For_10_Years()
-news_full_data = get_full_news_sentiment(News_sentiment_api_key, tickers=['COIN,CRYPTO:BTC,FOREX:USD'], topics=['crypto'])
-news_data=get_news_sentiment(News_sentiment_api_key, tickers=['BTC'], topics=['crypto'])
-print(btc_full_data.describe())
 
 #RSI DATA
 
@@ -457,6 +324,34 @@ def fetch_and_calculate_rsi(api_key, fsym="BTC", tsym="USD", start_date="2017-08
     else:
         return "No data found or error in fetching data."
 
-# Example usage
+# BINANCE DATA
+btc_full_data = Binance_Data(symbol='BTCUSDT', interval='1d')
+
+# Daily Order Flow Data
+frames = []
+for start, end in intervals:
+    order_flow_data = fetch_daily_order_flow('BTCUSDT', start, end)
+    frames.append(order_flow_data)
+    print(f"Data fetched from {start.date()} to {end.date()}")
+
+full_data = pd.concat(frames)
+# Basic EDA and Data Correction
+print("\nBasic Exploratory Data Analysis:")
+print("Data Summary:\n", full_data.describe())
+print("Missing Values:\n", full_data.isnull().sum())
+full_data.ffill(inplace=True)  
+print("\nCorrected Data Head:\n", full_data.head())
+
+# News Sentiment Data
+news_data=get_news_sentiment(News_sentiment_api_key, tickers=['BTC'], topics=['crypto'])
+
+#Rsi Data
 rsi_data = fetch_and_calculate_rsi(RSI_api_key)
-print(rsi_data)
+
+# Inflation Data
+inflation_data = get_inflation_data(News_sentiment_api_key)
+
+# CPI Data
+cpi_data = get_cpi_data(News_sentiment_api_key)
+
+
