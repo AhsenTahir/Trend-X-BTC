@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from config import Binance_api_key, Binance_secret_key, News_sentiment_api_key, RSI_api_key
+from config import Binance_api_key, Binance_secret_key, News_sentiment_api_key, RSI_api_key, Fred_api_key
 # Initialize the config parser
 
 
@@ -225,57 +225,43 @@ def get_cpi_data(News_sentiment_api_key, start_date='2017-08-17', end_date=None)
     return df
 
 def get_inflation_data(api_key, start_date='2017-08-17'):
-    # Construct the URL for fetching the inflation data from Alpha Vantage
-    url = f'https://www.alphavantage.co/query?function=INFLATION&apikey={api_key}'
+    # Series ID for the Inflation Rate (example: 'T5YIFR' for 5-Year Inflation Expectations)
+    series_id = 'T5YIFR'  # Update this ID based on the exact series you need
+
+    # Construct the URL for fetching the inflation data from FRED
+    url = f'https://api.stlouisfed.org/fred/series/observations?series_id={series_id}&api_key={api_key}&file_type=json'
 
     # Fetch data from the API
     response = requests.get(url)
 
     # Check if the request was successful
     if response.status_code != 200:
-        raise Exception(f"Failed to fetch data: {response.status_code}")
+        raise Exception(f"Failed to fetch data: {response.status_code}, {response.text}")
 
     # Parse the JSON response
     inflation_data = response.json()
 
-    # Check if 'data' key is present in the JSON response
-    if 'data' not in inflation_data:
+    # Check if 'observations' key is present in the JSON response
+    if 'observations' not in inflation_data:
         raise Exception("Invalid data received from the API")
     
-    annual_df = pd.DataFrame(inflation_data['data'])
+    # Initialize DataFrame from the 'observations' key
+    data_df = pd.DataFrame(inflation_data['observations'])
 
-    # Convert 'date' column to datetime and 'value' column to float
-    annual_df['date'] = pd.to_datetime(annual_df['date'])
-    annual_df['value'] = annual_df['value'].astype(float)
+    # Check for necessary columns and convert them
+    if 'date' not in data_df.columns or 'value' not in data_df.columns:
+        raise Exception("Missing necessary columns in the data")
+    data_df['date'] = pd.to_datetime(data_df['date'])
+    data_df['value'] = pd.to_numeric(data_df['value'], errors='coerce')  # Convert to float, coercing errors
 
     # Convert start_date to datetime
     start_date = pd.to_datetime(start_date)
 
-    # Create an empty DataFrame to hold daily data
-    daily_df = pd.DataFrame()
-
-    # Loop through each row in the annual DataFrame
-    for _, row in annual_df.iterrows():
-        year = row['date'].year
-        inflation_rate = row['value']
-        
-        # Generate a date range for the year
-        date_range = pd.date_range(start=f'{year}-01-01', end=f'{year}-12-31', freq='D')
-        
-        # Create a DataFrame for this year's dates and inflation rate
-        year_df = pd.DataFrame({
-            'date': date_range,
-            'inflation_rate': inflation_rate
-        })
-        
-        # Append to the daily DataFrame
-        daily_df = pd.concat([daily_df, year_df], ignore_index=True)
-
-    # Filter daily_df to include only dates from start_date to the current date
+    # Filter data from start_date to the current date
     current_date = datetime.now()
-    daily_df = daily_df[(daily_df['date'] >= start_date) & (daily_df['date'] <= current_date)]
+    filtered_data = data_df[(data_df['date'] >= start_date) & (data_df['date'] <= current_date)]
 
-    return daily_df   
+    return filtered_data   
 
 #RSI DATA
 
@@ -352,7 +338,7 @@ def Data_Generator():
     rsi_data.rename(columns={'time': 'Date'}, inplace=True)
 
     # Inflation Data
-    inflation_data = get_inflation_data(News_sentiment_api_key)
+    inflation_data = get_inflation_data(Fred_api_key)
     inflation_data.rename(columns={'date': 'Date', 'inflation_rate': 'Inflation Rate'}, inplace=True)
 
     # CPI Data
