@@ -2,20 +2,41 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 from data_cleaning.data_cleaning import data_cleaning
-from data.DataGenerator import Data_Generator
+from data_generator.DataGenerator import Data_Generator
+from config import GENERATE_NEW_DATA 
+# Define the path to your Excel file
+excel_file_path = 'Stored_data/cleaned_data.xlsx'
 
-Raw_Data=Data_Generator()
-print("Raw Data head")
-print(Raw_Data.head())
-print("Raw Data info")
-print(Raw_Data.info())
-print("Raw Data describe")
-print(Raw_Data.describe())
-data=data_cleaning(Raw_Data)
-print("Data head")
-print(data.head())
-print("Data info")
-print(data.info())
-print("Data describe")
-print(data.describe())
+if GENERATE_NEW_DATA:
+    # Generate new data
+    Raw_Data = Data_Generator()
+    print("Raw Data head")
+    print(Raw_Data.head())
+    print("Raw Data info")
+    print(Raw_Data.info())
+    print("Raw Data describe")
+    print(Raw_Data.describe())
 
+    # Clean the generated data
+    data = data_cleaning(Raw_Data)
+    print("Data head")
+    print(data.head())
+    print("Data info")
+    print(data.info())
+    print("Data describe")
+    print(data.describe())
+
+    # Save the cleaned data to an Excel sheet, overwriting the existing file
+    data.to_excel(excel_file_path, index=False)
+    print(f"Cleaned data saved to {excel_file_path}")
+
+else:
+    # Use the existing data from the Excel file
+    data = pd.read_excel(excel_file_path)
+    print("Loaded data from existing Excel file")
+    print("Data head")
+    print(data.head())
+    print("Data info")
+    print(data.info())
+    print("Data describe")
+    print(data.describe())
