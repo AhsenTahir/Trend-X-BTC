@@ -8,6 +8,9 @@ import configparser
 import os
 from datetime import datetime, timedelta
 import sys
+from pandas_datareader import data as pdr
+from packaging.version import Version as LooseVersion
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from config import Binance_api_key, Binance_secret_key, News_sentiment_api_key, RSI_api_key, Fred_api_key
@@ -112,7 +115,7 @@ def fetch_and_clean_binance_data(symbol, start_date, end_date, interval):
 
 # Example usage
 symbol = 'BTCUSDT'  # Bitcoin to USD Tether
-start_date = "1 Jan, 2014"
+start_date = "17 Aug, 2017"
 end_date = "1 Jan, 2024"
 interval = Client.KLINE_INTERVAL_1DAY  # Daily intervals
 
@@ -160,14 +163,13 @@ intervals = [
 
 
 
-
-
 def Binance_Data(symbol='BTCUSDT', interval='1d'):
     client = Client(API_KEY, SECRET_KEY)
     
     # Define the time range for the API call
     end_date = datetime.now()
-    start_date = end_date - timedelta(days=365 * 10)  # Start date 10 years ago
+    start_date = datetime.strptime("17 Aug, 2017", "%d %b, %Y")
+    #start_date = end_date - timedelta(days=365 * 10)  # Start date 10 years ago
 
     # Fetch data in a single call
     data = fetch_and_clean_binance_data(
@@ -224,44 +226,44 @@ def get_cpi_data(News_sentiment_api_key, start_date='2017-08-17', end_date=None)
 
     return df
 
-def get_inflation_data(api_key, start_date='2017-08-17'):
-    # Series ID for the Inflation Rate (example: 'T5YIFR' for 5-Year Inflation Expectations)
-    series_id = 'T5YIFR'  # Update this ID based on the exact series you need
-
-    # Construct the URL for fetching the inflation data from FRED
-    url = f'https://api.stlouisfed.org/fred/series/observations?series_id={series_id}&api_key={api_key}&file_type=json'
-
-    # Fetch data from the API
-    response = requests.get(url)
-
-    # Check if the request was successful
-    if response.status_code != 200:
-        raise Exception(f"Failed to fetch data: {response.status_code}, {response.text}")
-
-    # Parse the JSON response
-    inflation_data = response.json()
-
-    # Check if 'observations' key is present in the JSON response
-    if 'observations' not in inflation_data:
-        raise Exception("Invalid data received from the API")
+def get_inflation_data(start_date='2017-08-17', end_date=None):
+    if end_date is None:
+        end_date = datetime.now()
     
-    # Initialize DataFrame from the 'observations' key
-    data_df = pd.DataFrame(inflation_data['observations'])
+    # Define the start and end years for the detailed data range
+    start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+    end_dt = end_date
 
-    # Check for necessary columns and convert them
-    if 'date' not in data_df.columns or 'value' not in data_df.columns:
-        raise Exception("Missing necessary columns in the data")
-    data_df['date'] = pd.to_datetime(data_df['date'])
-    data_df['value'] = pd.to_numeric(data_df['value'], errors='coerce')  # Convert to float, coercing errors
-
-    # Convert start_date to datetime
-    start_date = pd.to_datetime(start_date)
-
-    # Filter data from start_date to the current date
-    current_date = datetime.now()
-    filtered_data = data_df[(data_df['date'] >= start_date) & (data_df['date'] <= current_date)]
-
-    return filtered_data   
+    # Fetch the CPI data using the FRED API key (Note: you should have this key configured)
+    cpi_data = pdr.get_data_fred('CPIAUCSL', start_dt, end_dt)
+    
+    # Calculate yearly inflation rate based on CPI changes
+    cpi_data['Inflation Rate'] = cpi_data['CPIAUCSL'].pct_change(12) * 100  # Annual percentage change
+    
+    # Resample the data annually and take the last available data each year
+    annual_inflation_rate = cpi_data['Inflation Rate'].resample('YE').last().dropna()
+    
+    # Create a date range for each day from the start date to the end date
+    daily_date_range = pd.date_range(start=start_date, end=end_date.strftime("%Y-%m-%d"))
+    
+    # Create a daily dataframe from the annual data
+    daily_inflation_rate = pd.DataFrame(index=daily_date_range, columns=['Inflation Rate'])
+    
+    # Convert annual_inflation_rate to a Series with the year as its index for easier access
+    annual_inflation_rate.index = annual_inflation_rate.index.year
+    
+    # Assign the annual inflation rate to each day of the respective year
+    for year in range(start_dt.year, end_dt.year + 1):
+        if year in annual_inflation_rate.index:
+            # Mask to identify dates within the current year
+            mask = (daily_inflation_rate.index.year == year)
+            # Assign the yearly inflation rate to each day in the year
+            daily_inflation_rate.loc[mask, 'Inflation Rate'] = annual_inflation_rate.loc[year]
+    
+    daily_inflation_rate.reset_index(inplace=True)
+    daily_inflation_rate.rename(columns={'index': 'Date'}, inplace=True)
+    
+    return daily_inflation_rate
 
 #RSI DATA
 
@@ -295,7 +297,7 @@ def fetch_data_segment(api_key, fsym, tsym, to_timestamp):
         print(f"Failed to fetch data: {response.status_code}")
         return pd.DataFrame()
 
-def fetch_and_calculate_rsi(api_key, fsym="BTC", tsym="USD", start_date="2017-08-01"):
+def fetch_and_calculate_rsi(api_key, fsym="BTC", tsym="USD", start_date="2017-08-17"):
     end_date = datetime.now()
     start_timestamp = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp())
     end_timestamp = int(end_date.timestamp())
@@ -333,16 +335,16 @@ def Data_Generator():
     full_order_flow_data.rename(columns={'open_time': 'Date'}, inplace=True)
 
     # RSI Data
-    rsi_data = fetch_and_calculate_rsi(RSI_api_key)
+    rsi_data = fetch_and_calculate_rsi(RSI_api_key, start_date="2017-08-17")
     rsi_data.reset_index(inplace=True)
     rsi_data.rename(columns={'time': 'Date'}, inplace=True)
 
     # Inflation Data
-    inflation_data = get_inflation_data(Fred_api_key)
-    inflation_data.rename(columns={'date': 'Date', 'inflation_rate': 'Inflation Rate'}, inplace=True)
+    inflation_data = get_inflation_data(start_date='2017-08-17')
+    inflation_data.rename(columns={'Date': 'Date', 'Inflation Rate': 'Inflation Rate'}, inplace=True)
 
     # CPI Data
-    cpi_data = get_cpi_data(News_sentiment_api_key)
+    cpi_data = get_cpi_data(News_sentiment_api_key, start_date='2017-08-17')
     cpi_data.rename(columns={'date': 'Date', 'cpi_value': 'CPI'}, inplace=True)
 
     # Merge DataFrames
@@ -351,6 +353,15 @@ def Data_Generator():
     combined_df = pd.merge(combined_df, inflation_data, on='Date', how='outer')
     combined_df = pd.merge(combined_df, cpi_data, on='Date', how='outer')
     combined_df.sort_values('Date', inplace=True)
+
+    # Filter data from August 17, 2017 onwards
+    start_date = pd.to_datetime('2017-08-17')
+    combined_df = combined_df[combined_df['Date'] >= start_date]
+
+    combined_df.ffill(inplace=True)  # Forward fill
+    combined_df = combined_df.infer_objects()
+    combined_df.bfill(inplace=True)  # Backward fill (if forward fill is not sufficient)
+    pd.set_option('future.no_silent_downcasting', True)
 
     print(combined_df.shape)
     print(combined_df.columns)

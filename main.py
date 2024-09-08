@@ -18,3 +18,4 @@ print("Data info")
 print(data.info())
 print("Data describe")
 print(data.describe())
+
