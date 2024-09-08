@@ -181,11 +181,17 @@ def Binance_Data(symbol='BTCUSDT', interval='1d'):
     print(data.shape[0])
     return data
 
+# Function to get the current date
+def get_current_date():
+    return datetime.now().date()
 
-
-def get_cpi_data(api_key, start_date='2017-07-1'):
+# CPI function (changed)
+def get_cpi_data(News_sentiment_api_key, start_date='2017-08-17', end_date=None):
+    if end_date is None:
+        end_date = get_current_date()
+    
     # Define the URL with your API key
-    url = f'https://www.alphavantage.co/query?function=CPI&interval=monthly&apikey={api_key}'
+    url = f'https://www.alphavantage.co/query?function=CPI&interval=monthly&apikey={News_sentiment_api_key}'
     
     # Fetch the data
     response = requests.get(url)
@@ -209,14 +215,15 @@ def get_cpi_data(api_key, start_date='2017-07-1'):
     df['date'] = pd.to_datetime(df['date'])
     df = df.sort_values('date')
     
-    # Filter data from the start_date to today
-    df = df[df['date'] >= pd.to_datetime(start_date)]
+    # Filter data from the start_date to end_date
+    df = df[(df['date'] >= pd.to_datetime(start_date)) & (df['date'] <= pd.to_datetime(end_date))]
     
     # Since the data is monthly, we'll forward fill the missing days to create a daily DataFrame
     df.set_index('date', inplace=True)
     df = df.resample('D').ffill().reset_index()  # Forward fill to get daily values
 
     return df
+
 def get_inflation_data(api_key, start_date='2017-08-17'):
     # Construct the URL for fetching the inflation data from Alpha Vantage
     url = f'https://www.alphavantage.co/query?function=INFLATION&apikey={api_key}'

@@ -5,7 +5,7 @@ from data_cleaning.data_cleaning import data_cleaning
 from data_generator.DataGenerator import Data_Generator
 from config import GENERATE_NEW_DATA 
 # Define the path to your Excel file
-excel_file_path = 'data/cleaned_data.xlsx'
+excel_file_path = 'Stored_data/cleaned_data.xlsx'
 
 if GENERATE_NEW_DATA:
     # Generate new data
