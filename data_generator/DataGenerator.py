@@ -28,29 +28,85 @@ print(News_sentiment_api_key)
 BASE_URL = 'https://api.binance.com'
 
 
-def fetch_fear_greed_index():
-    # Define the API endpoint
-    url = 'https://api.alternative.me/fng/?limit=30'  # Adjust limit for more data points
+def get_combined_fear_greed_data():
+    # Step 1: Load historical data from the GitHub repo
+    historical_url = 'https://raw.githubusercontent.com/gman4774/Fear_and_Greed_Index/main/all_fng_csv.csv'
+    df_historical = pd.read_csv(historical_url)
 
-    # Fetch data from the API
-    response = requests.get(url)
-    data = response.json()
+    # Ensure historical data has consistent column names
+    df_historical = df_historical.rename(columns={'Fear Greed': 'value'})
+    df_historical['Date'] = pd.to_datetime(df_historical['Date'])
 
-    # Parse data into a pandas DataFrame
-    df = pd.DataFrame(data['data'])
+    # Define the required date range
+    start_date = pd.to_datetime('2017-08-17')
+    end_date = pd.to_datetime('2024-09-10')
+    df_historical = df_historical[(df_historical['Date'] >= start_date) & (df_historical['Date'] <= end_date)]
 
-    # Convert timestamp to datetime
-    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
-    df['date'] = df['timestamp'].dt.date
-    df['time'] = df['timestamp'].dt.time
+    # Get the latest date from the historical data
+    last_historical_date = df_historical['Date'].max()
 
-    # Rename the 'value' and 'value_classification' columns
-    df = df.rename(columns={'value': 'index', 'value_classification': 'classification'})
+    # Step 2: Fetch real-time data from the alternative.me API
+    def fetch_fear_greed_alternative(last_historical_date):
+        api_url = f'https://api.alternative.me/fng/?limit=1000'  # Fetch more recent data points
+        response = requests.get(api_url)
+        data = response.json()
 
-    # Reorder the columns
-    df = df[['timestamp', 'date', 'time', 'index', 'classification']]
+        # Parse the data into a pandas DataFrame
+        df = pd.DataFrame(data['data'])
 
-    return df
+        # Convert 'timestamp' to numeric and then to datetime
+        df['timestamp'] = pd.to_numeric(df['timestamp'], errors='coerce')
+        df = df.dropna(subset=['timestamp'])
+        df['Date'] = pd.to_datetime(df['timestamp'], unit='s')
+
+        # Rename columns for consistency with historical data
+        df = df.rename(columns={'value': 'value'})
+        df['value'] = pd.to_numeric(df['value'], errors='coerce')
+
+        # Filter out real-time data based on the last historical date
+        df = df[df['Date'] > last_historical_date]
+
+        return df[['Date', 'value']]
+
+    # Fetch and clean real-time data
+    df_realtime = fetch_fear_greed_alternative(last_historical_date)
+
+    # Merge historical and real-time data
+    df_merged = pd.concat([df_historical[['Date', 'value']], df_realtime], ignore_index=True)
+
+    # Create a full date range from 17th Aug 2017 to 10th Sept 2024
+    full_date_range = pd.date_range(start=start_date, end=end_date)
+
+    # Merge the full date range with your data to find missing dates
+    df_merged = pd.merge(pd.DataFrame(full_date_range, columns=['Date']), df_merged, on='Date', how='left')
+
+    # Replace 0.0 values with NaN and forward-fill them
+    df_merged['value'] = df_merged['value'].replace(0, pd.NA).ffill()
+
+    # Define a function for classification based on global standards
+    def classify_fear_greed(value):
+        if value <= 24:
+            return 'Extreme Fear'
+        elif 25 <= value <= 49:
+            return 'Fear'
+        elif value == 50:
+            return 'Neutral'
+        elif 51 <= value <= 74:
+            return 'Greed'
+        elif value >= 75:
+            return 'Extreme Greed'
+
+    # Apply the classification function to the 'value' column
+    df_merged['classification'] = df_merged['value'].apply(classify_fear_greed)
+
+    # Sort by date to maintain consistency and order
+    df_merged = df_merged.sort_values(by='Date').reset_index(drop=True)
+
+    # Ensure the merged data spans from 17th August 2017 to the current date
+    df_merged = df_merged[(df_merged['Date'] >= start_date) & (df_merged['Date'] <= end_date)]
+
+    return df_merged
+
 
 def get_news_sentiment(api_key, tickers=None, topics=None):
     # Define the base URL for the API request
@@ -370,30 +426,29 @@ def Data_Generator():
     cpi_data = get_cpi_data(News_sentiment_api_key, start_date='2017-08-17')
     cpi_data.rename(columns={'date': 'Date', 'cpi_value': 'CPI'}, inplace=True)
 
+    # **Add Fear and Greed Index Data**
+    fear_greed_data = get_combined_fear_greed_data()
+
     # Merge DataFrames
     combined_df = pd.merge(btc_full_data, full_order_flow_data, on='Date', how='outer')
     combined_df = pd.merge(combined_df, rsi_data, on='Date', how='outer')
     combined_df = pd.merge(combined_df, inflation_data, on='Date', how='outer')
     combined_df = pd.merge(combined_df, cpi_data, on='Date', how='outer')
+    
+    # Merge Fear and Greed Index data
+    combined_df = pd.merge(combined_df, fear_greed_data[['Date', 'value', 'classification']], on='Date', how='outer')
+
+    # Sort by date to maintain consistency and order
     combined_df.sort_values('Date', inplace=True)
 
     # Filter data from August 17, 2017 onwards
     start_date = pd.to_datetime('2017-08-17')
     combined_df = combined_df[combined_df['Date'] >= start_date]
 
-    combined_df.ffill(inplace=True)  # Forward fill
-    combined_df = combined_df.infer_objects()
-    combined_df.bfill(inplace=True)  # Backward fill (if forward fill is not sufficient)
-    pd.set_option('future.no_silent_downcasting', True)
+    # Fill missing values using forward fill and backward fill as needed
+    combined_df.ffill(inplace=True)
+    combined_df.bfill(inplace=True)
 
     print(combined_df.shape)
     print(combined_df.columns)
     return combined_df
-
-
-
-
-
-
-
-
