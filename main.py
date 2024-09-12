@@ -4,6 +4,8 @@ import pandas as pd
 from data_cleaning.data_cleaning import data_cleaning
 from data_generator.DataGenerator import Data_Generator
 from config import GENERATE_NEW_DATA 
+from DataPreprocessing.data_preprocessing import preprocess_data
+
 # Define the path to your Excel file
 excel_file_path = 'Stored_data/cleaned_data.xlsx'
 
@@ -40,3 +42,17 @@ else:
     print(data.info())
     print("Data describe")
     print(data.describe())
+
+##data preprocessing
+data = preprocess_data(data)
+print("Data head")
+print(data.head())
+print("Data info")
+print(data.info())
+print("Data describe")
+print(data.describe())
+
+# Save preprocessed data to a new Excel file
+preprocessed_excel_file_path = 'Stored_data/preprocessed_data.xlsx'
+data.to_excel(preprocessed_excel_file_path, index=False)
+print(f"Preprocessed data saved to {preprocessed_excel_file_path}")
