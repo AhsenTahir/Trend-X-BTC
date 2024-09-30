@@ -118,5 +118,16 @@ plt.ylabel('Loss')
 plt.xlabel('Epoch')
 plt.legend()
 
+# Plot MAPE
+plt.subplot(1, 2, 2)
+plt.plot(history.history['mean_absolute_percentage_error'], label='Training MAPE')
+plt.title('Mean Absolute Percentage Error (MAPE)')
+plt.xlabel('Epochs')
+plt.ylabel('MAPE (%)')
+plt.legend()
+
+plt.tight_layout()
+plt.show()
+
 plt.tight_layout()
 plt.show()
