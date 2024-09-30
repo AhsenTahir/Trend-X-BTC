@@ -128,6 +128,3 @@ plt.legend()
 
 plt.tight_layout()
 plt.show()
-
-plt.tight_layout()
-plt.show()
