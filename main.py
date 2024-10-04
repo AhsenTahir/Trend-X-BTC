@@ -79,6 +79,8 @@ model = build_lstm_model(X_train)
 # Fit the model on the training data and store the training history
 history = model.fit(X_train, y_train, epochs=50, batch_size=32, validation_split=0.2)  # Fit the model with validation
 
+model.save('Stored_data\lstm_model.h5')
+
 # After training the model, predict on the test set
 predictions = model.predict(X_test)  # Use the test set for predictions
 
