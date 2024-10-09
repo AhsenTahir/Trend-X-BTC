@@ -1,27 +1,42 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import './App.css'; // Ensure you have some basic styles
+import './App.css';
+import CircularProgress from '@material-ui/core/CircularProgress';
 
 function App() {
-  const [date, setDate] = useState('2024-06-30'); // Default date to 30th June 2024
-  const [prediction, setPrediction] = useState(null); // Store prediction result
-  const [loading, setLoading] = useState(false); // Loading state
-  const [error, setError] = useState(null); // Error state
+  const [message, setMessage] = useState('');
+  const [prediction, setPrediction] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [dataGenerated, setDataGenerated] = useState(false);
 
-  const handleChange = (e) => {
-    setDate(e.target.value); // Update date state
+  const generateDataForToday = async () => {
+    setLoading(true);
+    setMessage('');
+    setPrediction(null);
+    try {
+      const response = await axios.post('http://localhost:8080/generate_data_for_today');
+      setMessage(response.data.message);
+      setDataGenerated(true);
+    } catch (error) {
+      setMessage(error.response ? error.response.data.detail : 'An error occurred while generating data.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handlePredict = async (e) => {
-    e.preventDefault();
+  const predictForToday = async () => {
+    if (!dataGenerated) {
+      setMessage('Please generate data for today first.');
+      return;
+    }
     setLoading(true);
-    setError(null); // Reset error state
+    setMessage('');
     try {
-      const response = await axios.post('http://localhost:5000/predict', { date });
-      setPrediction(response.data.prediction); // Set prediction result
+      const response = await axios.post('http://localhost:8080/predict_for_today');
+      setPrediction(response.data.predicted_value);
+      setMessage(response.data.message);
     } catch (error) {
-      console.error('Error making prediction:', error);
-      setError('Failed to fetch prediction. Please try again.'); // Set error message
+      setMessage(error.response ? error.response.data.detail : 'An error occurred while making the prediction.');
     } finally {
       setLoading(false);
     }
@@ -29,30 +44,19 @@ function App() {
 
   return (
     <div className="App">
-      <header>
-        <h1>BTC Price Prediction</h1>
-        <p>Get the predicted closing value for Bitcoin on a specific date.</p>
-      </header>
-      <form onSubmit={handlePredict} className="prediction-form">
-        <label htmlFor="date">Select Date:</label>
-        <input
-          type="date"
-          id="date"
-          value={date}
-          onChange={handleChange}
-          required
-        />
-        <button type="submit" disabled={loading}>
-          {loading ? 'Loading...' : 'Predict'}
-        </button>
-      </form>
-      {error && <div className="error">{error}</div>}
-      {prediction !== null && (
-        <div className="result">
-          <h2>Predicted Closing Value for {date}:</h2>
-          <h3>${prediction.toFixed(2)}</h3>
+      <header className="App-header">
+        <h1>Predict Today's Data</h1>
+        <div className="button-group">
+          <button onClick={generateDataForToday} disabled={loading}>
+            {loading ? <CircularProgress size={20} /> : 'Generate Data for Today'}
+          </button>
+          <button onClick={predictForToday} disabled={loading || !dataGenerated}>
+            {loading ? <CircularProgress size={20} /> : 'Predict for Today'}
+          </button>
         </div>
-      )}
+        {message && <p className="message">{message}</p>}
+        {prediction !== null && <p className="prediction">Predicted Value for Today: {prediction}</p>}
+      </header>
     </div>
   );
 }
