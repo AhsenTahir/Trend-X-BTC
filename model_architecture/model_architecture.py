@@ -1,6 +1,6 @@
 import numpy as np
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dropout, Dense
+from keras.models import Sequential
+from keras.layers import LSTM, Dropout, Dense
 
 def create_lstm_tensors(data, window_size=35):
     """
