@@ -1,0 +1,22 @@
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/api/auth/[...nextauth]/route": "app/api/auth/[...nextauth]/route.js",
+  "/api/trpc/[trpc]/route": "app/api/trpc/[trpc]/route.js",
+  "/(landing)/page": "app/(landing)/page.js",
+  "/(authenticated)/about/page": "app/(authenticated)/about/page.js",
+  "/(authenticated)/api-docs/page": "app/(authenticated)/api-docs/page.js",
+  "/(authenticated)/chatbot/page": "app/(authenticated)/chatbot/page.js",
+  "/(authenticated)/contact/page": "app/(authenticated)/contact/page.js",
+  "/(authenticated)/home/page": "app/(authenticated)/home/page.js",
+  "/(authenticated)/news/page": "app/(authenticated)/news/page.js",
+  "/(authenticated)/predict/page": "app/(authenticated)/predict/page.js",
+  "/(authenticated)/profile/page": "app/(authenticated)/profile/page.js",
+  "/(non-authenticated)/login/page": "app/(non-authenticated)/login/page.js",
+  "/(non-authenticated)/register/page": "app/(non-authenticated)/register/page.js",
+  "/(non-authenticated)/reset-password/page": "app/(non-authenticated)/reset-password/page.js",
+  "/(non-authenticated)/reset-password/[token]/page": "app/(non-authenticated)/reset-password/[token]/page.js",
+  "/(authenticated)/organizations/[organizationId]/page": "app/(authenticated)/organizations/[organizationId]/page.js",
+  "/(authenticated)/organizations/[organizationId]/members/page": "app/(authenticated)/organizations/[organizationId]/members/page.js",
+  "/(authenticated)/organizations/[organizationId]/pricing/page": "app/(authenticated)/organizations/[organizationId]/pricing/page.js",
+  "/(authenticated)/organizations/[organizationId]/settings/page": "app/(authenticated)/organizations/[organizationId]/settings/page.js"
+}
