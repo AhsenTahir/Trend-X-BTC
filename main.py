@@ -8,6 +8,7 @@ from DataPreprocessing.data_preprocessing import preprocess_data
 from model_architecture.model_architecture import create_lstm_tensors, build_lstm_model  
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from sklearn.model_selection import train_test_split  # Import train_test_split
+from sklearn.preprocessing import MinMaxScaler  # Add this import
 
 # Define the path to your Excel file
 excel_file_path = 'Stored_data/cleaned_data.xlsx'
@@ -47,7 +48,7 @@ else:
     print(data.describe())
 
 ##data preprocessing
-data = preprocess_data(data)
+data, scaler = preprocess_data(data)  # Modify this function to return the scaler as well
 print("Data head")
 print(data.head())
 print("Data info")
@@ -55,23 +56,26 @@ print(data.info())
 print("Data describe")
 print(data.describe())
 
+# Extract the 'Close' feature before creating LSTM tensors
+close_prices = data['Close'].values
+
+# Remove 'Close' from the features used for LSTM input
+features_for_lstm = data.drop('Close', axis=1)
+
 # Create LSTM tensors
 window_size = 35
-lstm_input = create_lstm_tensors(data, window_size)
-print("LSTM input shape:", lstm_input.shape)  # Check the shape of the LSTM input
+lstm_input = create_lstm_tensors(features_for_lstm, window_size)
+print("LSTM input shape:", lstm_input.shape)
 
-# Extract the 'close' feature
-close_feature_index = 3  # Adjust this index if 'close' is at a different position
-y = lstm_input[:, :, close_feature_index]  # Shape will be (samples, 35)
+# Prepare the target variable (y)
+y = close_prices[window_size-1:]  # Align with the LSTM input
 
-# Reshape y to match the expected shape for training
-y = y[:, -1]  # Use the last time step for y, shape will be (samples,)
-
-# Remove the 'close' feature from lstm_input
-lstm_input = np.delete(lstm_input, close_feature_index, axis=2)  # Remove the close feature
+# Create a separate scaler for the target variable
+target_scaler = MinMaxScaler()
+y_scaled = target_scaler.fit_transform(y.reshape(-1, 1)).flatten()
 
 # Split data into training and testing sets (80% train, 20% test)
-X_train, X_test, y_train, y_test = train_test_split(lstm_input, y, test_size=0.2, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(lstm_input, y_scaled, test_size=0.2, random_state=42)
 
 # Build the LSTM model
 model = build_lstm_model(X_train)
@@ -79,14 +83,14 @@ model = build_lstm_model(X_train)
 # Fit the model on the training data and store the training history
 history = model.fit(X_train, y_train, epochs=50, batch_size=32, validation_split=0.2)  # Fit the model with validation
 
-model.save('Stored_data\lstm_model.h5')
+model.save('Stored_data/lstm_model.h5')
 
 # After training the model, predict on the test set
 predictions = model.predict(X_test)  # Use the test set for predictions
 
-# Ensure y_test and predictions are 1-dimensional
-y_test = y_test.flatten()  # Reshape y_test if needed
-predictions = predictions.flatten()  # Reshape predictions if needed
+# Inverse transform both predictions and y_test
+predictions = target_scaler.inverse_transform(predictions.reshape(-1, 1)).flatten()
+y_test = target_scaler.inverse_transform(y_test.reshape(-1, 1)).flatten()
 
 # Calculate accuracy or error metrics on the test set
 mae = mean_absolute_error(y_test, predictions)

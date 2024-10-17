@@ -48,5 +48,15 @@ def preprocess_data(df):
 
     # Create the DataFrame
     df_preprocessed = pd.DataFrame(df_preprocessed, columns=numerical_cols + categorical_feature_names)
-    return df_preprocessed
-
+    
+    # Extract the scaler from the preprocessing pipeline
+    scaler = preprocessor.named_transformers_['num'].named_steps['scaler']
+    
+    # Remove 'Close' from numerical columns
+    close_column = 'Close'
+    numerical_cols.remove(close_column)
+    
+    # Add the unscaled 'Close' column back to the preprocessed data
+    df_preprocessed[close_column] = df[close_column]
+    
+    return df_preprocessed, scaler
