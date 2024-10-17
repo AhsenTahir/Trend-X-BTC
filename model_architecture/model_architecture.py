@@ -1,6 +1,6 @@
 import numpy as np
-from keras.models import Sequential
-from keras.layers import LSTM, Dropout, Dense
+from keras.models import Sequential, Model
+from keras.layers import LSTM, Dropout, Dense, AdditiveAttention, Permute, Reshape, Multiply, Flatten, Input
 
 def create_lstm_tensors(data, window_size=35):
     """
@@ -28,32 +28,49 @@ def create_lstm_tensors(data, window_size=35):
     
     return X
 
-def build_lstm_model(lstm_input):
+def build_lstm_model(X_train):
     """
-    Build the LSTM model architecture.
+    Build the LSTM model architecture with an attention mechanism.
     
     Parameters:
-    - lstm_input: Input data for the LSTM model.
+    - X_train: Input data for the LSTM model.
     
     Returns:
-    - model: Compiled Keras Sequential model.
+    - model: Compiled Keras Model.
     """
     # Ensure lstm_input is defined before this line
-    if lstm_input is None:
-        raise ValueError("lstm_input must be provided and cannot be None.")
+    if X_train is None:
+        raise ValueError("X_train must be provided and cannot be None.")
     
-    lstm_input = lstm_input.reshape(lstm_input.shape[0], lstm_input.shape[1], lstm_input.shape[2])  # Ensure it's 3D
+    # Define the input layer
+    inputs = Input(shape=X_train.shape[1:])
     
-    model = Sequential()
+    # First LSTM Layer
+    lstm_out1 = LSTM(units=70, return_sequences=True)(inputs)
     
-    # LSTM Layer
-    model.add(LSTM(units=10, input_shape=lstm_input.shape[1:], activation='tanh', return_sequences=False))
+    # Second LSTM Layer
+    lstm_out2 = LSTM(units=70, return_sequences=True)(lstm_out1)
+    
+    # Attention Layer
+    attention = AdditiveAttention()([lstm_out2, lstm_out2])
+    
+    # Multiply original output with attention output
+    attention_mul = Multiply()([lstm_out2, attention])
+    
+    # Permute and reshape for attention
+    permuted = Permute((2, 1))(attention_mul)
     
     # Dropout Layer
-    model.add(Dropout(rate=0.3))
+    dropout = Dropout(rate=0.3)(permuted)
+    
+    # Flatten Layer
+    flatten = Flatten()(dropout)
     
     # Dense Layer
-    model.add(Dense(units=1, activation='linear'))  # Linear activation for regression
+    outputs = Dense(units=1, activation='linear')(flatten)
+    
+    # Create the model
+    model = Model(inputs=inputs, outputs=outputs)
     
     # Compile the model
     model.compile(optimizer='adam', loss='mean_squared_error', metrics=['mean_absolute_error', 'mean_absolute_percentage_error'])
