@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 from keras.models import Sequential, Model
 from keras.layers import LSTM, Dropout, Dense, AdditiveAttention, Permute, Reshape, Multiply, Flatten, Input
 
