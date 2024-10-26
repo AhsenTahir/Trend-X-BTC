@@ -10,8 +10,10 @@ from datetime import datetime, timedelta
 import sys
 from pandas_datareader import data as pdr
 from packaging.version import Version as LooseVersion
+from google.cloud import bigquery
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "blockchain_data.json"
 
 from config import Binance_api_key, Binance_secret_key, News_sentiment_api_key, RSI_api_key, Fred_api_key
 # Initialize the config parser
@@ -398,6 +400,52 @@ def fetch_and_calculate_rsi(api_key, fsym="BTC", tsym="USD", start_date="2017-08
         return df_full[['close', 'RSI']]
     else:
         return "No data found or error in fetching data."
+    
+def fetch_bigquery_data():
+    client = bigquery.Client()
+    
+    # Define the query
+    query = """
+    SELECT
+      DATE(transactions.block_timestamp) AS date,
+      AVG(CAST(blocks.size AS INT64)) AS avg_block_size,
+      COUNT(DISTINCT inputs.spent_transaction_hash) AS num_user_addresses,
+      COUNT(DISTINCT transactions.hash) AS num_transactions,
+      SUM(CAST(transactions.fee AS INT64) + 
+          IF(DATE(transactions.block_timestamp) < '2016-07-09', 50 * 100000000,
+          IF(DATE(transactions.block_timestamp) < '2020-05-11', 12.5 * 100000000, 6.25 * 100000000))) AS miners_revenue
+    FROM
+      `bigquery-public-data.crypto_bitcoin.blocks` AS blocks
+    JOIN
+      `bigquery-public-data.crypto_bitcoin.transactions` AS transactions
+      ON blocks.hash = transactions.block_hash
+    JOIN
+      UNNEST(transactions.inputs) AS inputs
+    WHERE
+      DATE(transactions.block_timestamp) >= '2017-08-17' AND DATE(transactions.block_timestamp) <= CURRENT_DATE()
+    GROUP BY
+      date
+    ORDER BY
+      date ASC;
+    """
+
+    # Run the query and collect results
+    query_job = client.query(query)
+    results = query_job.result()  # Wait for the query to finish
+
+    # Process results into DataFrame
+    data = []
+    for row in results:
+        data.append({
+            'Date': row.date,
+            'avg_block_size': row.avg_block_size,
+            'num_user_addresses': row.num_user_addresses,
+            'num_transactions': row.num_transactions,
+            'miners_revenue': row.miners_revenue
+        })
+
+    df_bigquery = pd.DataFrame(data)
+    return df_bigquery
 
 def Data_Generator():
     # Fetch Binance Data
@@ -426,22 +474,27 @@ def Data_Generator():
     cpi_data = get_cpi_data(News_sentiment_api_key, start_date='2017-08-17')
     cpi_data.rename(columns={'date': 'Date', 'cpi_value': 'CPI'}, inplace=True)
 
-    # **Add Fear and Greed Index Data**
-    fear_greed_data = get_combined_fear_greed_data()
+    # Fear and Greed Index Data
+    #fear_greed_data = get_combined_fear_greed_data()
+
+    # **BigQuery Data**
+    bigquery_data = fetch_bigquery_data()
 
     # Merge DataFrames
     combined_df = pd.merge(btc_full_data, full_order_flow_data, on='Date', how='outer')
     combined_df = pd.merge(combined_df, rsi_data, on='Date', how='outer')
     combined_df = pd.merge(combined_df, inflation_data, on='Date', how='outer')
     combined_df = pd.merge(combined_df, cpi_data, on='Date', how='outer')
-    
-    # Merge Fear and Greed Index data
-    combined_df = pd.merge(combined_df, fear_greed_data[['Date', 'value', 'classification']], on='Date', how='outer')
+    #combined_df = pd.merge(combined_df, fear_greed_data[['Date', 'value', 'classification']], on='Date', how='outer')
+
+    # **Merge BigQuery Data**: Integrate the new dataset with the combined DataFrame
+    bigquery_data['Date'] = pd.to_datetime(bigquery_data['Date'])
+    combined_df = pd.merge(combined_df, bigquery_data, on='Date', how='outer')
 
     # Sort by date to maintain consistency and order
     combined_df.sort_values('Date', inplace=True)
 
-    # Filter data from August 17, 2017 onwards
+    # Filter data from August 17, 2017, onwards
     start_date = pd.to_datetime('2017-08-17')
     combined_df = combined_df[combined_df['Date'] >= start_date]
 
