@@ -475,7 +475,7 @@ def Data_Generator():
     cpi_data.rename(columns={'date': 'Date', 'cpi_value': 'CPI'}, inplace=True)
 
     # Fear and Greed Index Data
-    #fear_greed_data = get_combined_fear_greed_data()
+    fear_greed_data = get_combined_fear_greed_data()
 
     # **BigQuery Data**
     bigquery_data = fetch_bigquery_data()
@@ -485,7 +485,7 @@ def Data_Generator():
     combined_df = pd.merge(combined_df, rsi_data, on='Date', how='outer')
     combined_df = pd.merge(combined_df, inflation_data, on='Date', how='outer')
     combined_df = pd.merge(combined_df, cpi_data, on='Date', how='outer')
-    #combined_df = pd.merge(combined_df, fear_greed_data[['Date', 'value', 'classification']], on='Date', how='outer')
+    combined_df = pd.merge(combined_df, fear_greed_data[['Date', 'value', 'classification']], on='Date', how='outer')
 
     # **Merge BigQuery Data**: Integrate the new dataset with the combined DataFrame
     bigquery_data['Date'] = pd.to_datetime(bigquery_data['Date'])
