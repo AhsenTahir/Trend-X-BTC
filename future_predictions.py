@@ -1,14 +1,11 @@
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-from keras.models import load_model
+from tensorflow.keras.models import load_model
 from DataPreprocessing.data_preprocessing import preprocess_data
-from model_architecture.model_architecture import create_lstm_tensors
+from model_architecture.model_architecture import create_lstm_tensors, build_lstm_model
 from sklearn.preprocessing import MinMaxScaler
-
-# Load the trained model
-MODEL_PATH = "Stored_data/lstm_model.h5"
-model = load_model(MODEL_PATH)
+import torch
 
 # Load historical data with OHLC data
 EXCEL_FILE_PATH = "Stored_data/cleaned_data.xlsx"
@@ -49,12 +46,23 @@ last_data = lstm_input[-1:, :, :]
 # Make predictions for the next x days (daily)
 predictions = []
 for _ in range(x_days):
-    predicted_price = model.predict(last_data)
+    model = build_lstm_model(lstm_input)
+    model.load_state_dict(torch.load('Stored_data/lstm_model.pt'))
+    model.eval()
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model.to(device)
+    with torch.no_grad():
+        last_data = torch.FloatTensor(last_data).to(device)
+        predicted_price = model(last_data)
+        predicted_price = predicted_price.cpu().numpy()
     predictions.append(predicted_price[0, 0])
 
-    # Update last_data for the next prediction
+    # Move last_data to CPU before numpy operations
+    last_data = last_data.cpu().numpy()
     last_data = np.roll(last_data, -1, axis=1)
     last_data[0, -1, :] = predicted_price
+    # Convert back to tensor format for next iteration
+    last_data = torch.FloatTensor(last_data)
 
 # Create a date range for the future predictions (daily)
 last_date = pd.to_datetime(data['Date'].iloc[-1])

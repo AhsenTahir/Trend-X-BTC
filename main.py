@@ -9,6 +9,8 @@ from model_architecture.model_architecture import create_lstm_tensors, build_lst
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from sklearn.model_selection import train_test_split  # Import train_test_split
 from sklearn.preprocessing import MinMaxScaler  # Add this import
+import torch
+import torch.nn as nn
 
 # Define the path to your Excel file
 excel_file_path = 'Stored_data/cleaned_data.xlsx'
@@ -65,6 +67,41 @@ features_for_lstm = data.drop('Close', axis=1)
 # Create LSTM tensors
 window_size = 35
 lstm_input = create_lstm_tensors(features_for_lstm, window_size)
+
+# Input Data (features_for_lstm):
+#this is how the lstm tensor is created
+# [
+#     [f1_t1, f2_t1, f3_t1],  # time step 1
+#     [f1_t2, f2_t2, f3_t2],  # time step 2
+#     [f1_t3, f2_t3, f3_t3],  # time step 3
+#     [f1_t4, f2_t4, f3_t4],  # time step 4
+#     [f1_t5, f2_t5, f3_t5]   # time step 5
+# ]
+
+# With window_size = 3, the output tensor would look like:
+# [
+#     # First window
+#     [
+#         [f1_t1, f2_t1, f3_t1],
+#         [f1_t2, f2_t2, f3_t2],
+#         [f1_t3, f2_t3, f3_t3]
+#     ],
+#     # Second window
+#     [
+#         [f1_t2, f2_t2, f3_t2],
+#         [f1_t3, f2_t3, f3_t3],
+#         [f1_t4, f2_t4, f3_t4]
+#     ],
+#     # Third window
+#     [
+#         [f1_t3, f2_t3, f3_t3],
+#         [f1_t4, f2_t4, f3_t4],
+#         [f1_t5, f2_t5, f3_t5]
+#     ]
+# ]
+
+
+#(n_samples - window_size + 1, window_size, n_features)
 print("LSTM input shape:", lstm_input.shape)
 
 # Prepare the target variable (y)
@@ -79,18 +116,56 @@ X_train, X_test, y_train, y_test = train_test_split(lstm_input, y_scaled, test_s
 
 # Build the LSTM model
 model = build_lstm_model(X_train)
+optimizer = torch.optim.Adam(model.parameters())
+criterion = nn.MSELoss()
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+model.to(device)
 
-# Fit the model on the training data and store the training history
-history = model.fit(X_train, y_train, epochs=50, batch_size=32, validation_split=0.2)  # Fit the model with validation
+# Convert data to PyTorch tensors
+X_train = torch.FloatTensor(X_train).to(device)
+y_train = torch.FloatTensor(y_train).to(device)
+X_test = torch.FloatTensor(X_test).to(device)
+y_test = torch.FloatTensor(y_test).to(device)
 
-model.save('Stored_data/lstm_model.h5')
+# Training loop
+epochs = 50
+batch_size = 32
+history = {'loss': [], 'val_loss': []}  # Initialize history dictionary
+
+for epoch in range(epochs):
+    model.train()
+    train_losses = []
+    for i in range(0, len(X_train), batch_size):
+        batch_X = X_train[i:i+batch_size]
+        batch_y = y_train[i:i+batch_size]
+        
+        optimizer.zero_grad()
+        outputs = model(batch_X)
+        loss = criterion(outputs.squeeze(), batch_y)
+        loss.backward()
+        optimizer.step()
+        train_losses.append(loss.item())
+    
+    # Calculate average loss for the epoch
+    avg_train_loss = np.mean(train_losses)
+    history['loss'].append(avg_train_loss)
+    
+    # Calculate validation loss
+    model.eval()
+    with torch.no_grad():
+        val_outputs = model(X_test)
+        val_loss = criterion(val_outputs.squeeze(), y_test)
+        history['val_loss'].append(val_loss.item())
+
+# Save model
+torch.save(model.state_dict(), 'Stored_data/lstm_model.pt')
 
 # After training the model, predict on the test set
-predictions = model.predict(X_test)  # Use the test set for predictions
+predictions = model(X_test).detach().cpu().numpy().flatten()
 
 # Inverse transform both predictions and y_test
 predictions = target_scaler.inverse_transform(predictions.reshape(-1, 1)).flatten()
-y_test = target_scaler.inverse_transform(y_test.reshape(-1, 1)).flatten()
+y_test = target_scaler.inverse_transform(y_test.cpu().numpy().reshape(-1, 1)).flatten()
 
 # Calculate accuracy or error metrics on the test set
 mae = mean_absolute_error(y_test, predictions)
@@ -117,20 +192,20 @@ plt.figure(figsize=(12, 5))
 
 # Plot loss
 plt.subplot(1, 2, 1)
-plt.plot(history.history['loss'], label='Training Loss')
-plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.plot(history['loss'], label='Training Loss')
+plt.plot(history['val_loss'], label='Validation Loss')
 plt.title('Model Loss')
 plt.ylabel('Loss')
 plt.xlabel('Epoch')
 plt.legend()
 
-# Plot MAPE
+# Plot actual vs predicted values instead of MAPE
 plt.subplot(1, 2, 2)
-plt.plot(history.history['mean_absolute_percentage_error'], label='Training MAPE')
-plt.title('Mean Absolute Percentage Error (MAPE)')
-plt.xlabel('Epochs')
-plt.ylabel('MAPE (%)')
-plt.legend()
+plt.scatter(y_test, predictions, alpha=0.5)
+plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--', lw=2)
+plt.title('Actual vs Predicted Values')
+plt.xlabel('Actual')
+plt.ylabel('Predicted')
 
 plt.tight_layout()
 plt.show()
