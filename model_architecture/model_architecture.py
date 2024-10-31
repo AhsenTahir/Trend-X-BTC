@@ -15,12 +15,12 @@ def create_lstm_tensors(data, window_size=35):
     return torch.FloatTensor(X)
 
 class LSTMAttention(nn.Module):
-    def __init__(self, input_dim, window_size, hidden_dim=70):
+    def __init__(self, input_dim, window_size, hidden_dim=64):
         super(LSTMAttention, self).__init__()
         self.window_size = window_size
         self.lstm1 = nn.LSTM(input_dim, hidden_dim, batch_first=True)
         self.lstm2 = nn.LSTM(hidden_dim, hidden_dim, batch_first=True)
-        self.attention = nn.MultiheadAttention(hidden_dim, 1, batch_first=True)
+        self.attention = nn.MultiheadAttention(hidden_dim, num_heads=4, batch_first=True)
         self.dropout = nn.Dropout(0.3)
         self.flatten = nn.Flatten()
         self.fc = nn.Linear(hidden_dim * window_size, 1)
