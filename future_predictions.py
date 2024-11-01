@@ -79,40 +79,6 @@ predictions_df['Predicted Open'] = predictions_df['Predicted Close'] * 0.99  # E
 predictions_df['Predicted High'] = predictions_df['Predicted Close'] * 1.02  # Example assumption: High is 2% higher
 predictions_df['Predicted Low'] = predictions_df['Predicted Close'] * 0.98  # Example assumption: Low is 2% lower
 
-# Plot using Plotly Candlestick chart
-fig = go.Figure()
-
-# Add historical candlestick data (OHLC)
-fig.add_trace(go.Candlestick(
-    x=data['Date'],
-    open=data['Open'],
-    high=data['High'],
-    low=data['Low'],
-    close=data['Close'],
-    name='Historical Prices'
-))
-
-# Add predicted candlestick data (OHLC)
-fig.add_trace(go.Candlestick(
-    x=predictions_df['Date'],
-    open=predictions_df['Predicted Open'],
-    high=predictions_df['Predicted High'],
-    low=predictions_df['Predicted Low'],
-    close=predictions_df['Predicted Close'],
-    name='Predicted Prices',
-    increasing_line_color='orange', decreasing_line_color='red'
-))
-
-# Customize layout for better scrollability and interaction
-fig.update_layout(
-    title='Bitcoin Price Prediction (Candlestick)',
-    xaxis_title='Date',
-    yaxis_title='Price (USD)',
-    xaxis_rangeslider_visible=True,  # Enable the range slider
-    xaxis_type='date',
-    hovermode="x unified",
-    template='plotly_dark'  # Optional: Dark theme
-)
-
-# Show the plot
-fig.show()
+# Instead of showing the plot, return the predictions DataFrame
+def generate_predictions():
+    return predictions_df

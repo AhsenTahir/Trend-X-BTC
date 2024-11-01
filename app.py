@@ -1,113 +1,202 @@
 from fastapi import FastAPI, HTTPException
-import logging
-from pydantic import BaseModel
-import numpy as np
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import pandas as pd
-import datetime
-import os
-from keras.models import load_model
-from sklearn.preprocessing import StandardScaler
-from data_cleaning.data_cleaning import data_cleaning
+import plotly.graph_objects as go
+import torch
+import torch.nn as nn
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error, mean_squared_error
 from data_generator.DataGenerator import Data_Generator
+from data_cleaning.data_cleaning import data_cleaning
 from DataPreprocessing.data_preprocessing import preprocess_data
 from model_architecture.model_architecture import create_lstm_tensors, build_lstm_model
+from future_predictions import generate_predictions
+import logging
+from datetime import datetime
+from sklearn.preprocessing import MinMaxScaler
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
+# Configure logging
+logging.basicConfig(
+    filename='btc_prediction.log',
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
-# Initialize FastAPI app
 app = FastAPI()
 
-# Define the path to the stored model and data
-MODEL_PATH = "Stored_data/lstm_model.h5"
-EXCEL_FILE_PATH = "Stored_data/cleaned_data.xlsx"
-PREPROCESSED_FILE_PATH = "Stored_data/preprocessed_data.xlsx"
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# Define input parameters schema using Pydantic
-class PredictionRequest(BaseModel):
-    symbol: str = "BTCUSDT"  # default symbol is BTCUSDT
-    window_size: int = 35
-    generate_new_data: bool = False  # Flag to indicate if we need to regenerate data
-
-# Load the trained model
-def load_trained_model():
-    if not os.path.exists(MODEL_PATH):
-        raise HTTPException(status_code=500, detail="Trained model not found.")
-    model = load_model(MODEL_PATH)
-    return model
-
-from datetime import datetime
-
-def prepare_data(symbol, window_size, generate_new_data, model):
-    # Step 1: Load or Generate Data
-    current_date = datetime.now().strftime("%Y-%m-%d")
-    if generate_new_data or not os.path.exists(EXCEL_FILE_PATH):
-        data = Data_Generator(start_date=current_date, end_date=current_date)
-        data_cleaned = data_cleaning(data)
-        data_cleaned.to_excel(EXCEL_FILE_PATH, index=False)
-    else:
-        data_cleaned = pd.read_excel(EXCEL_FILE_PATH)
-
-    # Step 2: Preprocess the data
-    preprocessed_data = preprocess_data(data_cleaned)
-    
-    # Log the number of features after preprocessing
-    logging.info(f"Number of features in preprocessed data: {preprocessed_data.shape[1]}")
-    logging.info(f"Columns in preprocessed data: {preprocessed_data.columns.tolist()}")
-
-    preprocessed_data.to_excel(PREPROCESSED_FILE_PATH, index=False)
-
-    # Step 3: Create LSTM tensors
-    lstm_input = create_lstm_tensors(preprocessed_data, window_size)
-
-    # Ensure lstm_input has the correct number of time steps (e.g., window_size = 35)
-    if lstm_input.shape[1] != window_size:
-        raise ValueError(f"Expected window size of {window_size}, but got {lstm_input.shape[1]}.")
-
-    # Use the last window for prediction (ensure feature count matches model input)
-    latest_input = lstm_input[-1:, :, :]
-
-    # Dynamically determine the expected feature count based on the model input shape
-    expected_feature_count = model.input_shape[-1]
-
-    # Check the feature count
-    if latest_input.shape[-1] > expected_feature_count:
-        latest_input = latest_input[:, :, :expected_feature_count]
-    elif latest_input.shape[-1] < expected_feature_count:
-        raise ValueError(f"Expected {expected_feature_count} features, but got {latest_input.shape[2]}.")
-
-    return latest_input
-
-
-# API Endpoint to get predictions for the current date
-@app.post("/predict")
-async def get_prediction(request: PredictionRequest):
+async def train_model():
     try:
-        # Step 1: Load the LSTM model
-        model = load_trained_model()
-
-        # Step 2: Prepare the data (generate new or use existing)
-        lstm_input = prepare_data(request.symbol, request.window_size, request.generate_new_data, model)
-
-        # Step 3: Make predictions using the model
-        prediction = model.predict(lstm_input)
-        prediction_value = prediction.flatten()[0]  # Get the prediction for the last time step
-
-        # Step 4: Return the result as JSON
-        return {
-            "symbol": request.symbol,
-            "prediction_date": str(datetime.now().date()),
-            "predicted_value": float(prediction_value)
-        }
-
-    except ValueError as ve:
-        raise HTTPException(status_code=400, detail=str(ve))
-    except FileNotFoundError as fnfe:
-        raise HTTPException(status_code=404, detail=str(fnfe))
+        logging.info("Starting model training")
+        
+        # Generate new data
+        Raw_Data = Data_Generator()
+        
+        # Clean the generated data
+        data = data_cleaning(Raw_Data)
+        
+        # Save the cleaned data
+        data.to_excel("Stored_data/cleaned_data.xlsx", index=False)
+        
+        # Preprocess data
+        data, scaler = preprocess_data(data)
+        
+        # Extract close prices
+        close_prices = data['Close'].values
+        
+        # Remove 'Close' from features
+        features_for_lstm = data.drop('Close', axis=1)
+        
+        # Create LSTM tensors
+        window_size = 35
+        lstm_input = create_lstm_tensors(features_for_lstm, window_size)
+        
+        # Prepare target variable
+        y = close_prices[window_size-1:]
+        
+        # Scale target variable
+        target_scaler = MinMaxScaler()
+        y_scaled = target_scaler.fit_transform(y.reshape(-1, 1)).flatten()
+        
+        # Split data
+        X_train, X_test, y_train, y_test = train_test_split(
+            lstm_input, y_scaled, test_size=0.2, random_state=42
+        )
+        
+        # Build model
+        model = build_lstm_model(X_train)
+        optimizer = torch.optim.Adam(model.parameters())
+        criterion = nn.MSELoss()
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        model.to(device)
+        
+        # Convert to PyTorch tensors
+        X_train = torch.FloatTensor(X_train).to(device)
+        y_train = torch.FloatTensor(y_train).to(device)
+        X_test = torch.FloatTensor(X_test).to(device)
+        y_test = torch.FloatTensor(y_test).to(device)
+        
+        # Training loop
+        epochs = 50
+        batch_size = 32
+        
+        for epoch in range(epochs):
+            model.train()
+            train_losses = []
+            
+            for i in range(0, len(X_train), batch_size):
+                batch_X = X_train[i:i+batch_size]
+                batch_y = y_train[i:i+batch_size]
+                
+                optimizer.zero_grad()
+                outputs = model(batch_X)
+                loss = criterion(outputs.squeeze(), batch_y)
+                loss.backward()
+                optimizer.step()
+                train_losses.append(loss.item())
+        
+        # Save model
+        torch.save(model.state_dict(), 'Stored_data/lstm_model.pt')
+        
+        logging.info("Model training completed successfully")
+        return True
+        
     except Exception as e:
+        logging.error(f"Error in model training: {str(e)}")
+        return False
+
+@app.get("/")
+async def root():
+    return {"message": "Bitcoin Price Prediction API"}
+
+@app.post("/update-predictions")
+async def update_predictions():
+    try:
+        # Log the start of update process
+        logging.info("Starting prediction update process")
+        
+        # First train the model with new data
+        training_success = await train_model()
+        if not training_success:
+            raise HTTPException(
+                status_code=500,
+                detail="Model training failed"
+            )
+        
+        # Generate new predictions
+        predictions_df = generate_predictions()
+        
+        # Save predictions to Excel
+        predictions_df.to_excel("Stored_data/predictions.xlsx", index=False)
+        
+        # Create candlestick chart
+        fig = go.Figure()
+        
+        # Add historical data
+        historical_data = pd.read_excel("Stored_data/cleaned_data.xlsx")
+        fig.add_trace(go.Candlestick(
+            x=historical_data['Date'],
+            open=historical_data['Open'],
+            high=historical_data['High'],
+            low=historical_data['Low'],
+            close=historical_data['Close'],
+            name='Historical Prices'
+        ))
+        
+        # Add predicted data
+        fig.add_trace(go.Candlestick(
+            x=predictions_df['Date'],
+            open=predictions_df['Predicted Open'],
+            high=predictions_df['Predicted High'],
+            low=predictions_df['Predicted Low'],
+            close=predictions_df['Predicted Close'],
+            name='Predicted Prices',
+            increasing_line_color='orange',
+            decreasing_line_color='red'
+        ))
+        
+        # Update layout
+        fig.update_layout(
+            title='Bitcoin Price Prediction (Candlestick)',
+            xaxis_title='Date',
+            yaxis_title='Price (USD)',
+            xaxis_rangeslider_visible=True,
+            xaxis_type='date',
+            hovermode="x unified",
+            template='plotly_dark'
+        )
+        
+        # Convert the figure to JSON
+        chart_json = fig.to_json()
+        
+        # Log successful update
+        logging.info("Prediction update completed successfully")
+        
+        return JSONResponse(content={
+            "message": "Model trained and predictions updated successfully",
+            "chart_data": chart_json,
+            "last_updated": datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        logging.error(f"Error updating predictions: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# Example GET endpoint to check server status
-@app.get("/")
-async def read_root():
-    return {"message": "Welcome to the LSTM Prediction API. Use /predict endpoint for predictions."}
+@app.get("/get-predictions")
+async def get_predictions():
+    try:
+        predictions_df = pd.read_excel("Stored_data/predictions.xlsx")
+        return JSONResponse(content=predictions_df.to_dict(orient='records'))
+    except Exception as e:
+        logging.error(f"Error fetching predictions: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
