@@ -11,6 +11,7 @@ from sklearn.model_selection import train_test_split  # Import train_test_split
 from sklearn.preprocessing import MinMaxScaler  # Add this import
 import torch
 import torch.nn as nn
+from DataPreprocessing.data_preprocessing import data_augmentation
 
 # Define the path to your Excel file
 excel_file_path = 'Stored_data/cleaned_data.xlsx'
@@ -50,6 +51,7 @@ else:
     print(data.describe())
 
 ##data preprocessing
+#data=data_augmentation(data)
 data, scaler = preprocess_data(data)  # Modify this function to return the scaler as well
 print("Data head")
 print(data.head())
@@ -65,7 +67,7 @@ close_prices = data['Close'].values
 features_for_lstm = data.drop('Close', axis=1)
 
 # Create LSTM tensors
-window_size = 35
+window_size = 60
 lstm_input = create_lstm_tensors(features_for_lstm, window_size)
 
 # Input Data (features_for_lstm):
@@ -128,7 +130,7 @@ X_test = torch.FloatTensor(X_test).to(device)
 y_test = torch.FloatTensor(y_test).to(device)
 
 # Training loop
-epochs = 50
+epochs = 100
 batch_size = 32
 history = {'loss': [], 'val_loss': []}  # Initialize history dictionary
 

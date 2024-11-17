@@ -31,7 +31,7 @@ def generate_predictions():
     input_features = preprocessed_data.drop('Close', axis=1)
     
     # Create LSTM tensors
-    window_size = 35
+    window_size = 60
     lstm_input = create_lstm_tensors(input_features, window_size)
     
     # Print shape of lstm_input for verification

@@ -4,8 +4,13 @@ from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 from sklearn.exceptions import NotFittedError
+import numpy as np
+
+
 
 def preprocess_data(df):
+    if 'value' in df.columns:
+        df.drop(columns=['value'], inplace=True)
     # Step 1: Define numerical and categorical columns
     numerical_cols = df.select_dtypes(include=['float64', 'int64']).columns.tolist()
     
@@ -75,6 +80,56 @@ def preprocess_data(df):
 
     # Step 7: Check shape and column alignment for debugging
     print("Final shape of preprocessed data:", df_preprocessed.shape)
-
+  
     # Step 8: Return preprocessed DataFrame and scaler for future use
     return df_preprocessed, preprocessor.named_transformers_['num'].named_steps['scaler']
+
+def add_gaussian_noise(df, columns_to_augment, noise_fraction=0.02):
+    """
+    Adds Gaussian noise to specified numerical columns in the DataFrame.
+
+    Parameters:
+    - df: The input DataFrame.
+    - columns_to_augment: List of column names to which noise will be added.
+    - noise_fraction: Fraction of the mean to determine the standard deviation of the noise.
+
+    Returns:
+    - DataFrame with added Gaussian noise in specified columns.
+    """
+    df_augmented = df.copy()  # Create a copy to avoid modifying the original DataFrame
+    print("debugging 1")
+    count=0
+    for column in columns_to_augment:
+        if column in df_augmented.columns:
+            mean = df_augmented[column].mean()
+            print(f"debugging 2 mean: {mean}")
+            std_dev = noise_fraction * mean  # Calculate standard deviation as a fraction of the mean
+            print(f"debugging 3 std_dev: {std_dev}")
+            noise = np.random.normal(0, std_dev, size=df_augmented[column].shape)  # Generate Gaussian noise
+            print(f"debugging 4 noise: {noise}")
+            df_augmented[column] += noise  # Add noise to the column
+            print(type(df_augmented[column]))
+            count+=1
+            print(f"debugging 5 count: {count} column: {column}")
+
+    return df_augmented
+
+
+
+
+def data_augmentation(data):
+    # Example usage
+    print("Data augmentation")
+    columns_to_augment = [
+        'Open', 'High', 'Low', 'Close', 'Volume', 'Quote asset volume',
+        'Taker buy base asset volume', 'Taker buy quote asset volume',
+        'RSI', 'Inflation Rate', 'avg_block_size',
+        'num_transactions', 'miners_revenue'
+    ]
+    print("Data before augmentation")
+    # Assuming 'data' is your original DataFrame
+    data.head()
+    print("Data after augmentation")
+    data_augmented = add_gaussian_noise(data, columns_to_augment)
+    data_augmented.head()
+    return data_augmented
