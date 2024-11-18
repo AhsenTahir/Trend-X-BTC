@@ -12,6 +12,7 @@ from sklearn.preprocessing import MinMaxScaler  # Add this import
 import torch
 import torch.nn as nn
 from DataPreprocessing.data_preprocessing import data_augmentation
+from firebase_utils import save_df_to_firebase, save_model_to_firebase, file_exists_in_firebase
 
 # Define the path to your Excel file
 excel_file_path = 'Stored_data/cleaned_data.xlsx'
@@ -35,14 +36,20 @@ if GENERATE_NEW_DATA:
     print("Data describe")
     print(data.describe())
 
-    # Save the cleaned data to an Excel sheet, overwriting the existing file
+    # Save the cleaned data both locally and to Firebase
     data.to_excel(excel_file_path, index=False)
-    print(f"Cleaned data saved to {excel_file_path}")
+    save_df_to_firebase(data, 'cleaned_data.csv')
+    print(f"Cleaned data saved locally to {excel_file_path} and to Firebase Storage")
 
 else:
-    # Use the existing data from the Excel file
-    data = pd.read_excel(excel_file_path)
-    print("Loaded data from existing Excel file")
+    # Try to load from Firebase first, fall back to local if needed
+    if file_exists_in_firebase('data/cleaned_data.csv'):
+        data = load_df_from_firebase('cleaned_data.csv')
+        print("Loaded data from Firebase Storage")
+    else:
+        data = pd.read_excel(excel_file_path)
+        print("Loaded data from local Excel file")
+    
     print("Data head")
     print(data.head())
     print("Data info")
@@ -161,6 +168,8 @@ for epoch in range(epochs):
 
 # Save model
 torch.save(model.state_dict(), 'Stored_data/lstm_model.pt')
+save_model_to_firebase(model, 'lstm_model.pt')
+print("Model saved locally and to Firebase Storage")
 
 # After training the model, predict on the test set
 predictions = model(X_test).detach().cpu().numpy().flatten()
@@ -183,11 +192,14 @@ print(f'Mean Absolute Percentage Error (Test Set): {mape:.2f}%')
 # Optionally, save predictions to a file for further analysis
 results = pd.DataFrame({'Actual': y_test, 'Predicted': predictions})
 results.to_excel('Stored_data/predictions_test.xlsx', index=False)
+save_df_to_firebase(results, 'predictions_test.csv')
+print("Predictions saved locally and to Firebase Storage")
 
 # Save preprocessed data to a new Excel file
 preprocessed_excel_file_path = 'Stored_data/preprocessed_data.xlsx'
 data.to_excel(preprocessed_excel_file_path, index=False)
-print(f"Preprocessed data saved to {preprocessed_excel_file_path}")
+save_df_to_firebase(data, 'preprocessed_data.csv')
+print(f"Preprocessed data saved locally and to Firebase Storage")
 
 # Plotting the training history
 plt.figure(figsize=(12, 5))
