@@ -38,3 +38,6 @@ wheels/
 Stored_data/*.xlsx
 *.log
 *.pt
+
+#firebase credentials
+firebase-credentials.json
