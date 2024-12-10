@@ -74,7 +74,7 @@ close_prices = data['Close'].values
 features_for_lstm = data.drop('Close', axis=1)
 
 # Create LSTM tensors
-window_size = 60
+window_size = 35
 lstm_input = create_lstm_tensors(features_for_lstm, window_size)
 
 # Input Data (features_for_lstm):

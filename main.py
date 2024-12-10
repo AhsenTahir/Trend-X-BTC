@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from firebase_utils import save_df_to_firebase, load_df_from_firebase, file_exists_in_firebase
 import pandas as pd
 import plotly.graph_objects as go
 import torch
@@ -34,6 +35,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add this near the top of main.py, with other constants/configurations
+predictions_excel_path = "Stored_data/predictions.xlsx"
 
 async def train_model():
     try:
@@ -122,7 +126,6 @@ async def root():
 @app.post("/update-predictions")
 async def update_predictions():
     try:
-        # Log the start of update process
         logging.info("Starting prediction update process")
         
         # First train the model with new data
@@ -134,16 +137,22 @@ async def update_predictions():
             )
         
         # Generate new predictions
-        predictions_df = generate_predictions()
+        predictions_df, _ = generate_predictions()
         
-        # Save predictions to Excel
-        predictions_df.to_excel("Stored_data/predictions.xlsx", index=False)
+        # Load historical data from Firebase first, fall back to local
+        if file_exists_in_firebase('data/cleaned_data.csv'):
+            historical_data = load_df_from_firebase('cleaned_data.csv')
+        else:
+            historical_data = pd.read_excel("Stored_data/cleaned_data.xlsx")
+        
+        # Convert timestamps to string format for JSON serialization
+        historical_data['Date'] = historical_data['Date'].dt.strftime('%Y-%m-%d')
+        predictions_df['Date'] = predictions_df['Date'].dt.strftime('%Y-%m-%d')
         
         # Create candlestick chart
         fig = go.Figure()
         
-        # Add historical data
-        historical_data = pd.read_excel("Stored_data/cleaned_data.xlsx")
+        # Add historical data as candlestick
         fig.add_trace(go.Candlestick(
             x=historical_data['Date'],
             open=historical_data['Open'],
@@ -153,21 +162,18 @@ async def update_predictions():
             name='Historical Prices'
         ))
         
-        # Add predicted data
-        fig.add_trace(go.Candlestick(
+        # Add predicted data as line plot
+        fig.add_trace(go.Scatter(
             x=predictions_df['Date'],
-            open=predictions_df['Predicted Open'],
-            high=predictions_df['Predicted High'],
-            low=predictions_df['Predicted Low'],
-            close=predictions_df['Predicted Close'],
-            name='Predicted Prices',
-            increasing_line_color='orange',
-            decreasing_line_color='red'
+            y=predictions_df['Predicted Close'],
+            name='Predicted Price',
+            line=dict(color='orange', width=2),
+            opacity=0.8
         ))
         
         # Update layout
         fig.update_layout(
-            title='Bitcoin Price Prediction (Candlestick)',
+            title='Bitcoin Price Prediction',
             xaxis_title='Date',
             yaxis_title='Price (USD)',
             xaxis_rangeslider_visible=True,
@@ -176,15 +182,9 @@ async def update_predictions():
             template='plotly_dark'
         )
         
-        # Convert the figure to JSON
-        chart_json = fig.to_json()
-        
-        # Log successful update
-        logging.info("Prediction update completed successfully")
-        
         return JSONResponse(content={
             "message": "Model trained and predictions updated successfully",
-            "chart_data": chart_json,
+            "chart_data": fig.to_json(),
             "last_updated": datetime.now().isoformat()
         })
         
@@ -195,8 +195,22 @@ async def update_predictions():
 @app.get("/get-predictions")
 async def get_predictions():
     try:
-        predictions_df = pd.read_excel("Stored_data/predictions.xlsx")
+        # Try to load predictions from Firebase first
+        if file_exists_in_firebase('data/predictions.csv'):
+            predictions_df = load_df_from_firebase('predictions.csv')
+            # Convert Date column to datetime
+            predictions_df['Date'] = pd.to_datetime(predictions_df['Date'])
+            print("Loaded predictions from Firebase Storage")
+        else:
+            # If not in Firebase, generate new predictions
+            print("No predictions found in Firebase, generating new ones...")
+            predictions_df, _ = generate_predictions()  # This will create and save predictions to both local and Firebase
+        
+        # Convert timestamps to string format
+        predictions_df['Date'] = predictions_df['Date'].dt.strftime('%Y-%m-%d')
+        
         return JSONResponse(content=predictions_df.to_dict(orient='records'))
+    
     except Exception as e:
         logging.error(f"Error fetching predictions: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
