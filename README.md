@@ -1,6 +1,6 @@
 # TREND-X-BTC: Bitcoin 30 Days Forecasting with LSTMs and Multi-Head Attention Mechanism
 <div style="width: 400px; height: 300px; overflow: hidden;">
-  <img src="img/Trend-X-BTC.png" alt="Approach Overview" style="width: 90%; height: 80%; object-fit: cover; object-position: top right;" />
+  <img src="img/Trend-X-BTC.png" alt="Approach Overview" style="width: 100%; height: 1000%; object-fit: cover; object-position: top right;" />
 </div>
 
 
