@@ -13,6 +13,8 @@ import torch
 import torch.nn as nn
 from DataPreprocessing.data_preprocessing import data_augmentation
 from firebase_utils import save_df_to_firebase, save_model_to_firebase, file_exists_in_firebase
+from lime.lime_tabular import LimeTabularExplainer  # Import LIME
+import shap  # Import SHAP
 
 # Define the path to your Excel file
 excel_file_path = 'Stored_data/cleaned_data.xlsx'
@@ -71,7 +73,11 @@ print(data.describe())
 close_prices = data['Close'].values
 
 # Remove 'Close' from the features used for LSTM input
-features_for_lstm = data.drop('Close', axis=1)
+features_for_lstm = data.drop(['Close'], axis=1)  # Ensure 'Close' is dropped correctly
+
+# Check the shape and columns
+print("Features for LSTM shape:", features_for_lstm.shape)
+print("Features for LSTM columns:", features_for_lstm.columns.tolist())
 
 # Create LSTM tensors
 window_size = 35
@@ -135,6 +141,41 @@ X_train = torch.FloatTensor(X_train).to(device)
 y_train = torch.FloatTensor(y_train).to(device)
 X_test = torch.FloatTensor(X_test).to(device)
 y_test = torch.FloatTensor(y_test).to(device)
+
+# Reshape X_train to be 2D
+X_train_reshaped = X_train.view(X_train.size(0), -1)  # Flatten the window size dimension
+
+# Check the shape of the reshaped data
+print("X_train_reshaped shape:", X_train_reshaped.shape)
+
+# Ensure feature names match the number of features in X_train_reshaped
+num_features = features_for_lstm.shape[1]  # Number of features in the original DataFrame
+print("Number of features:", num_features)
+print("Feature names length:", len(features_for_lstm.columns.tolist()))
+
+# Create LIME explainer
+if num_features == len(features_for_lstm.columns.tolist()):
+    explainer = LimeTabularExplainer(X_train_reshaped.cpu().numpy(), 
+                                      feature_names=features_for_lstm.columns.tolist(), 
+                                      class_names=['Close'], 
+                                      mode='regression')
+else:
+    raise ValueError("Mismatch between number of features and feature names.")
+
+# Example of using LIME to explain a prediction
+i = 0  # Index of the instance to explain
+lime_exp = explainer.explain_instance(X_test[i].cpu().numpy().flatten(), model.predict, num_features=10)
+lime_exp.show_in_notebook(show_table=True)
+
+# SHAP values
+shap_values = shap.KernelExplainer(model.predict, X_train.cpu().numpy()).shap_values(X_test.cpu().numpy())
+
+# Plot SHAP values
+shap.summary_plot(shap_values, X_test.cpu().numpy(), feature_names=features_for_lstm.columns.tolist())
+
+print("X_train shape:", X_train.shape)
+
+print("Features for LSTM:", features_for_lstm.columns.tolist())
 
 # Training loop
 epochs = 100
