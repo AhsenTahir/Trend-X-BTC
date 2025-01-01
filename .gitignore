@@ -41,3 +41,4 @@ Stored_data/*.xlsx
 
 #firebase credentials
 firebase-credentials.json
+blockchain_data.json
