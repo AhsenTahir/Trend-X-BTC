@@ -136,4 +136,4 @@ def plot_predictions(predictions_df, data):
 # If you want to run this script standalone for testing:
 if __name__ == "__main__":
     predictions_df, data = generate_predictions()
-    plot_predictions(predictions_df, data)
+    #plot_predictions(predictions_df, data)
