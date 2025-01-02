@@ -66,7 +66,7 @@
 ## Installation
 ### Clone the Repository
 ```bash
-$env:GIT_HTTP_MAX_BUFFER=104857600; git clone --depth 1 https://github.com/mustafahk27/Trend-X-BTC.git
+$env:GIT_HTTP_MAX_BUFFER=104857600; git clone --depth 1 https://github.com/AhsenTahir/Trend-X-BTC.git
 cd Trend-X-BTC
 ```
 
